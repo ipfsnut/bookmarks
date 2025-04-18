@@ -49,7 +49,7 @@ export const createSession = async (userId: string, walletAddress: string): Prom
  */
 export const validateSession = async (token: string): Promise<{ valid: boolean; userId?: string; walletAddress?: string }> => {
   try {
-    // Use the Supabase client directly
+    // Use the Supabase client instead of direct fetch
     const { data, error } = await supabase
       .from('sessions')
       .select('user_id, wallet_address, expires_at')
