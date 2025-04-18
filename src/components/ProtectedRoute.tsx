@@ -10,7 +10,7 @@ export const ProtectedRoute = ({ children }: ProtectedRouteProps) => {
   const { isAuthenticated, isLoading } = useWallet();
   
   if (isLoading) {
-    return <div>Loading...</div>;
+    return <div>Loading authentication status...</div>;
   }
   
   if (!isAuthenticated) {

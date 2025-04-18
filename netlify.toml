@@ -1,0 +1,19 @@
+[build]
+  command = "npm run build"
+  publish = "dist"
+  functions = "netlify/functions"
+
+[dev]
+  command = "npm run dev"
+  port = 8888
+  targetPort = 5173
+  framework = "vite"
+
+[functions]
+  node_bundler = "esbuild"
+
+# Reference environment variables without hardcoding values
+[dev.environment]
+  # This tells Netlify Dev to use the values from your .env file
+  SUPABASE_URL = "${env:VITE_SUPABASE_URL}"
+  SUPABASE_SERVICE_KEY = "${env:SUPABASE_SERVICE_KEY}"

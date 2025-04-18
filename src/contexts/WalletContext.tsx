@@ -100,7 +100,7 @@ export const WalletProvider: React.FC<{ children: ReactNode }> = ({ children }) 
       // Request signature from wallet
       const signature = await signMessageAsync({ message });
       
-      // Verify signature on server
+      // Verify signature on server and handle user creation/lookup
       const verifyResponse = await fetch(API_ENDPOINTS.AUTH, {
         method: 'POST',
         headers: {
@@ -114,67 +114,32 @@ export const WalletProvider: React.FC<{ children: ReactNode }> = ({ children }) 
       });
       
       if (!verifyResponse.ok) {
-        throw new Error('Signature verification failed');
+        const errorData = await verifyResponse.json();
+        throw new Error(errorData.error || 'Authentication failed');
       }
       
-      // Check if user exists in database
-      const { data: existingUser, error: fetchError } = await supabase
-        .from('users')
-        .select('id')
-        .eq('wallet_address', address.toLowerCase())
-        .single();
+      const responseData = await verifyResponse.json();
       
-      let userId: string;
-      
-      if (fetchError && fetchError.code !== 'PGRST116') {
-        throw fetchError;
-      }
-      
-      if (existingUser) {
-        // User exists
-        userId = existingUser.id;
+      // If we got a successful response, consider the user authenticated
+      if (responseData.success) {
+        // Save session token if provided
+        if (responseData.token) {
+          localStorage.setItem(AUTH_CONSTANTS.SESSION_TOKEN_KEY, responseData.token);
+          setSessionToken(responseData.token);
+        }
+        
+        // Set user ID if provided
+        if (responseData.userId) {
+          setUserId(responseData.userId);
+        }
+        
+        setIsAuthenticated(true);
+        
+        // Generate new nonce for next sign-in
+        setNonce(generateNonce());
       } else {
-        // Create new user
-        const { data: newUser, error: insertError } = await supabase
-          .from('users')
-          .insert([
-            { wallet_address: address.toLowerCase() }
-          ])
-          .select()
-          .single();
-        
-        if (insertError) throw insertError;
-        
-        userId = newUser.id;
-        
-        // Award welcome tokens (via serverless function)
-        await fetch(API_ENDPOINTS.AWARD_TOKENS, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({ 
-            userId, 
-            amount: 5, 
-            reason: 'welcome' 
-          }),
-        });
+        throw new Error('Authentication failed without specific error');
       }
-      
-      // Create a new session
-      const token = await createSession(userId, address.toLowerCase());
-      
-      // Save session token to localStorage
-      localStorage.setItem(AUTH_CONSTANTS.SESSION_TOKEN_KEY, token);
-      
-      // Update state
-      setUserId(userId);
-      setSessionToken(token);
-      setIsAuthenticated(true);
-      
-      // Generate new nonce for next sign-in
-      setNonce(generateNonce());
-      
     } catch (err) {
       console.error('Error signing in:', err);
       setError(err instanceof Error ? err : new Error('Unknown error'));
@@ -182,7 +147,6 @@ export const WalletProvider: React.FC<{ children: ReactNode }> = ({ children }) 
       setIsLoading(false);
     }
   };
-
   // Sign out function
   const signOut = async () => {
     if (sessionToken) {
