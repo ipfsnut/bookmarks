@@ -25,7 +25,9 @@ export const createSession = async (userId: string, walletAddress: string): Prom
   
   // Calculate expiration date
   const expiresAt = new Date();
-  expiresAt.setDate(expiresAt.getDate() + AUTH_CONSTANTS.SESSION_DURATION_DAYS);
+  // Use SESSION_DURATION instead of SESSION_DURATION_DAYS
+  // Convert milliseconds to days (1 day = 24 * 60 * 60 * 1000 milliseconds)
+  expiresAt.setTime(expiresAt.getTime() + AUTH_CONSTANTS.SESSION_DURATION);
   
   // Store session in database
   const { error } = await supabase
@@ -42,46 +44,44 @@ export const createSession = async (userId: string, walletAddress: string): Prom
   // Return the session token
   return sessionToken;
 };
-
 /**
  * Validates a session token
  */
-export const validateSession = async (sessionToken: string): Promise<{ 
-  valid: boolean; 
-  userId?: string;
-  walletAddress?: string;
-}> => {
-  // Check if session exists and is not expired
-  const { data, error } = await supabase
-    .from('sessions')
-    .select('user_id, wallet_address, expires_at')
-    .eq('token', sessionToken)
-    .single();
-  
-  if (error || !data) {
-    return { valid: false };
-  }
-  
-  // Check if session is expired
-  if (new Date(data.expires_at) < new Date()) {
-    // Delete expired session
-    await supabase
+export const validateSession = async (token: string): Promise<{ valid: boolean; userId?: string; walletAddress?: string }> => {
+  try {
+    // Use the Supabase client directly
+    const { data, error } = await supabase
       .from('sessions')
-      .delete()
-      .eq('token', sessionToken);
-      
+      .select('user_id, wallet_address, expires_at')
+      .eq('token', token)
+      .single();
+    
+    if (error) {
+      console.error('Session validation failed:', error);
+      return { valid: false };
+    }
+    
+    if (!data) {
+      return { valid: false };
+    }
+    
+    const now = new Date();
+    const expiresAt = new Date(data.expires_at);
+    
+    if (now > expiresAt) {
+      return { valid: false };
+    }
+    
+    return { 
+      valid: true, 
+      userId: data.user_id,
+      walletAddress: data.wallet_address
+    };
+  } catch (error) {
+    console.error('Error validating session:', error);
     return { valid: false };
   }
-  
-  return { 
-    valid: true, 
-    userId: data.user_id,
-    walletAddress: data.wallet_address
-  };
-};
-
-/**
- * Deletes a session
+};/** * Deletes a session
  */
 export const deleteSession = async (sessionToken: string): Promise<void> => {
   await supabase
