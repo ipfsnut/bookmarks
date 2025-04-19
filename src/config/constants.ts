@@ -23,7 +23,8 @@ export const API_ENDPOINTS = {
   USER: `${API_BASE}/user`,
   TOKEN_BALANCE: `${API_BASE}/token-balance`,
   AWARD_TOKENS: `${API_BASE}/award-tokens`,
-  BOOKMARKS: `${API_BASE}/bookmarks`
+  BOOKMARKS: `${API_BASE}/bookmarks`,
+  BISAC_CODES: '/.netlify/functions/bisac-codes'
 };// Contract Constants - to be filled with actual addresses when deployed
 export const CONTRACT_CONSTANTS = {
   BOOKMARK_CONTRACT_ADDRESS: import.meta.env.VITE_BOOKMARK_CONTRACT_ADDRESS || '0x0000000000000000000000000000000000000000'};

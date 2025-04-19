@@ -351,6 +351,7 @@ const handler: Handler = async (event) => {
           author: bookmarkData.author,
           description: bookmarkData.description || null,
           cover_url: bookmarkData.cover_url || null,
+          bisac_codes: bookmarkData.bisac_codes || null,
           added_by: userId
         };
         

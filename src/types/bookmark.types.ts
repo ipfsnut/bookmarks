@@ -2,8 +2,12 @@ export interface Bookmark {
   id: string;
   title: string;
   author: string;
-  description: string;
-  coverImageUrl: string;
+  description: string | null;
+  coverImageUrl: string | null;
+  
+  // BISAC categorization
+  bisacCodes: string[]; // Array of BISAC codes
+  bisacCategories: string[]; // Human-readable BISAC categories
   
   // Traditional publishing identifiers
   isbn10?: string;
@@ -52,8 +56,36 @@ export interface Bookmark {
 }
 
 // For bookmark creation/editing
-export type BookmarkInput = Omit<Bookmark, 'id' | 'createdAt' | 'updatedAt' | 'totalStake' | 'stakeCount'>;
-
+export interface BookmarkInput {
+  title: string;
+  author: string;
+  description?: string;
+  coverUrl?: string;
+  bisacCodes?: string[];
+  isbn10?: string;
+  isbn13?: string;
+  doi?: string;
+  oclc?: string;
+  publisher?: string;
+  publishDate?: string;
+  edition?: string;
+  language?: string;
+  pageCount?: number;
+  genres?: string[];
+  tags?: string[];
+  contractAddress?: string;
+  tokenId?: string;
+  ipfsHash?: string;
+  websiteUrl?: string;
+  purchaseUrl?: string;
+  readUrl?: string;
+  metadata?: {
+    [key: string]: any;
+  };
+  createdBy?: string;
+  verifiedAuthor?: boolean;
+  authorId?: string;
+}
 // For displaying author information
 export interface Author {
   id: string;
