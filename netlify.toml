@@ -8,17 +8,12 @@
   port = 8888
   targetPort = 5173
   framework = "vite"
+
 [functions]
   node_bundler = "esbuild"
   external_node_modules = ["@supabase/supabase-js"]
 
-[build.environment]
-  NODE_OPTIONS = "--enable-source-maps"
-
-[functions."*"]
-  format = "esm"
-# Reference environment variables without hardcoding values
-[dev.environment]
-  # This tells Netlify Dev to use the values from your .env file
-  SUPABASE_URL = "${env:VITE_SUPABASE_URL}"
-  SUPABASE_SERVICE_KEY = "${env:SUPABASE_SERVICE_KEY}"
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200

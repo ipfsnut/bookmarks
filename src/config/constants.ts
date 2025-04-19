@@ -1,7 +1,10 @@
+// Base URL for API endpoints
+const API_BASE = '/.netlify/functions';
+
 export const AUTH_CONSTANTS = {
   SESSION_TOKEN_KEY: 'bookmarks_session_token',
   NONCE_LENGTH: 16,
-  SESSION_DURATION: 24 * 60 * 60 * 1000 // 24 hours in milliseconds
+  SESSION_DURATION_DAYS: 7 // Session duration in days
 };
 
 export const TOKEN_CONSTANTS = {
@@ -16,7 +19,11 @@ export const TOKEN_CONSTANTS = {
 };
 
 export const API_ENDPOINTS = {
-  AUTH: '/.netlify/functions/auth',
-  USER: '/.netlify/functions/user',
-  TOKEN_BALANCE: '/.netlify/functions/token-balance',
-  AWARD_TOKENS: '/.netlify/functions/award-tokens'};
+  AUTH: `${API_BASE}/auth`,
+  USER: `${API_BASE}/user`,
+  TOKEN_BALANCE: `${API_BASE}/token-balance`,
+  AWARD_TOKENS: `${API_BASE}/award-tokens`,
+  BOOKMARKS: `${API_BASE}/bookmarks`
+};// Contract Constants - to be filled with actual addresses when deployed
+export const CONTRACT_CONSTANTS = {
+  BOOKMARK_CONTRACT_ADDRESS: import.meta.env.VITE_BOOKMARK_CONTRACT_ADDRESS || '0x0000000000000000000000000000000000000000'};

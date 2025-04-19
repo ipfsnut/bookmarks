@@ -43,24 +43,35 @@ export const WalletProvider: React.FC<{ children: ReactNode }> = ({ children }) 
         const storedToken = localStorage.getItem(AUTH_CONSTANTS.SESSION_TOKEN_KEY);
         
         if (storedToken) {
+          console.log('Found stored session token, validating...');
           // Validate the session token
           const { valid, userId: validUserId, walletAddress } = await validateSession(storedToken);
           
           if (valid && validUserId && walletAddress && address) {
+            console.log('Session is valid, checking wallet match...');
             // Verify the session belongs to the connected wallet
             if (walletAddress.toLowerCase() === address.toLowerCase()) {
+              console.log('Wallet matches session, authentication successful');
               setUserId(validUserId);
               setSessionToken(storedToken);
               setIsAuthenticated(true);
             } else {
               // Connected wallet doesn't match session
+              console.log('Wallet address mismatch, clearing session');
               localStorage.removeItem(AUTH_CONSTANTS.SESSION_TOKEN_KEY);
-              await deleteSession(storedToken);
+              try {
+                await deleteSession(storedToken);
+              } catch (deleteErr) {
+                console.error('Error deleting mismatched session:', deleteErr);
+              }
             }
           } else {
             // Invalid or expired session
+            console.log('Session is invalid or expired, clearing');
             localStorage.removeItem(AUTH_CONSTANTS.SESSION_TOKEN_KEY);
           }
+        } else {
+          console.log('No stored session token found');
         }
       } catch (err) {
         console.error('Error checking authentication:', err);
@@ -69,8 +80,7 @@ export const WalletProvider: React.FC<{ children: ReactNode }> = ({ children }) 
       } finally {
         setIsLoading(false);
       }
-    };
-    
+    };    
     // Generate a new nonce for signing
     setNonce(generateNonce());
     

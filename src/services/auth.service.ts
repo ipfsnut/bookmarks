@@ -25,9 +25,9 @@ export const createSession = async (userId: string, walletAddress: string): Prom
   
   // Calculate expiration date
   const expiresAt = new Date();
-  // Use SESSION_DURATION instead of SESSION_DURATION_DAYS
-  // Convert milliseconds to days (1 day = 24 * 60 * 60 * 1000 milliseconds)
-  expiresAt.setTime(expiresAt.getTime() + AUTH_CONSTANTS.SESSION_DURATION);
+  expiresAt.setDate(expiresAt.getDate() + AUTH_CONSTANTS.SESSION_DURATION_DAYS);
+  
+  console.log('Creating session with token:', sessionToken);
   
   // Store session in database
   const { error } = await supabase
@@ -39,12 +39,14 @@ export const createSession = async (userId: string, walletAddress: string): Prom
       expires_at: expiresAt.toISOString(),
     }]);
   
-  if (error) throw error;
+  if (error) {
+    console.error('Error creating session:', error);
+    throw error;
+  }
   
   // Return the session token
   return sessionToken;
-};
-/**
+};/**
  * Validates a session token
  */
 export const validateSession = async (token: string): Promise<{ valid: boolean; userId?: string; walletAddress?: string }> => {
