@@ -36,18 +36,6 @@ const handler: Handler = async (event) => {
     };
   }
 
-  // Verify authentication
-  const authHeader = event.headers.authorization || '';
-  const token = authHeader.replace('Bearer ', '');
-  
-  if (!token) {
-    return {
-      statusCode: 401,
-      headers,
-      body: JSON.stringify({ error: 'Authentication required' })
-    };
-  }
-
   try {
     console.log('Function environment:', { 
       hasUrl: !!supabaseUrl, 
@@ -60,6 +48,31 @@ const handler: Handler = async (event) => {
       console.log('Using mock data for bookmarks function');
       
       if (event.httpMethod === 'GET') {
+        // Handle GET request with mock data
+        const bookmarkId = event.queryStringParameters?.id;
+        
+        if (bookmarkId) {
+          // Return a single mock bookmark
+          return {
+            statusCode: 200,
+            headers,
+            body: JSON.stringify({
+              bookmark: {
+                id: bookmarkId,
+                title: 'The Great Gatsby',
+                author: 'F. Scott Fitzgerald',
+                description: 'A novel about the American Dream.',
+                cover_url: 'https://m.media-amazon.com/images/I/71FTb9X6wsL._AC_UF1000,1000_QL80_.jpg',
+                added_by: 'dev-user-123',
+                created_at: new Date().toISOString(),
+                updated_at: new Date().toISOString(),
+                total_delegations: 12
+              }
+            })
+          };
+        }
+        
+        // Return mock bookmarks list
         return {
           statusCode: 200,
           headers,
@@ -93,6 +106,8 @@ const handler: Handler = async (event) => {
       }
       
       if (event.httpMethod === 'POST') {
+        // For POST requests, we would normally require authentication
+        // But for mock data, we'll just return a success response
         const bookmarkData = JSON.parse(event.body || '{}');
         return {
           statusCode: 201,
@@ -106,6 +121,189 @@ const handler: Handler = async (event) => {
           })
         };
       }
+    }
+    
+    // Handle GET requests - allow public access
+    if (event.httpMethod === 'GET') {
+      const bookmarkId = event.queryStringParameters?.id;
+      const userOnly = event.queryStringParameters?.userOnly === 'true';
+      const sortBy = event.queryStringParameters?.sortBy || 'created_at';
+      const limit = parseInt(event.queryStringParameters?.limit || '50');
+      
+      console.log('Fetching bookmarks with params:', { bookmarkId, userOnly, sortBy, limit });
+      
+      // If requesting user-specific bookmarks, we need authentication
+      if (userOnly) {
+        const authHeader = event.headers.authorization || '';
+        const token = authHeader.replace('Bearer ', '');
+        
+        if (!token) {
+          return {
+            statusCode: 401,
+            headers,
+            body: JSON.stringify({ error: 'Authentication required for user-specific bookmarks' })
+          };
+        }
+        
+        // Decode token to get user ID
+        const tokenParts = Buffer.from(token, 'base64').toString().split(':');
+        const userId = tokenParts[0];
+        
+        if (!userId) {
+          return {
+            statusCode: 401,
+            headers,
+            body: JSON.stringify({ error: 'Invalid token' })
+          };
+        }
+        
+        // Fetch user-specific bookmarks
+        let query = supabase
+          .from('books')
+          .select(`
+            *,
+            stakes(id, amount, user_id)
+          `)
+          .eq('added_by', userId);
+        
+        // Apply sorting
+        query = query.order('created_at', { ascending: false });
+        
+        // Apply limit
+        query = query.limit(limit);
+        
+        const { data, error } = await query;
+        
+        if (error) {
+          console.error('Error fetching user bookmarks:', error);
+          return {
+            statusCode: 500,
+            headers,
+            body: JSON.stringify({ error: 'Error fetching bookmarks' })
+          };
+        }
+        
+        // Process the data
+        const processedData = data?.map(bookmark => {
+          const totalDelegations = bookmark.stakes?.reduce((sum, stake) => 
+            sum + (typeof stake.amount === 'number' ? stake.amount : 0), 0) || 0;
+          
+          const { stakes, ...bookmarkWithoutStakes } = bookmark;
+          
+          return {
+            ...bookmarkWithoutStakes,
+            total_delegations: totalDelegations
+          };
+        });
+        
+        return {
+          statusCode: 200,
+          headers,
+          body: JSON.stringify({ bookmarks: processedData || [] })
+        };
+      }
+      
+      // If fetching a specific bookmark by ID
+      if (bookmarkId) {
+        const { data, error } = await supabase
+          .from('books')
+          .select(`
+            *,
+            stakes(id, amount, user_id)
+          `)
+          .eq('id', bookmarkId)
+          .single();
+          
+        if (error) {
+          console.error('Error fetching bookmark by ID:', error);
+          return {
+            statusCode: 500,
+            headers,
+            body: JSON.stringify({ error: 'Error fetching bookmark' })
+          };
+        }
+        
+        if (!data) {
+          return {
+            statusCode: 404,
+            headers,
+            body: JSON.stringify({ error: 'Bookmark not found' })
+          };
+        }
+        
+        // Process the data
+        const totalDelegations = data.stakes?.reduce((sum, stake) => 
+          sum + (typeof stake.amount === 'number' ? stake.amount : 0), 0) || 0;
+        
+        const { stakes, ...bookmarkWithoutStakes } = data;
+        
+        const processedBookmark = {
+          ...bookmarkWithoutStakes,
+          total_delegations: totalDelegations
+        };
+        
+        return {
+          statusCode: 200,
+          headers,
+          body: JSON.stringify({ bookmark: processedBookmark })
+        };
+      }
+      
+      // If fetching all bookmarks (public access)
+      let query = supabase
+        .from('books')
+        .select(`
+          *,
+          stakes(id, amount, user_id)
+        `);
+      
+      // Apply sorting
+      query = query.order('created_at', { ascending: false });
+      
+      // Apply limit
+      query = query.limit(limit);
+      
+      const { data, error } = await query;
+      
+      if (error) {
+        console.error('Error fetching all bookmarks:', error);
+        return {
+          statusCode: 500,
+          headers,
+          body: JSON.stringify({ error: 'Error fetching bookmarks' })
+        };
+      }
+      
+      // Process the data
+      const processedData = data?.map(bookmark => {
+        const totalDelegations = bookmark.stakes?.reduce((sum, stake) => 
+          sum + (typeof stake.amount === 'number' ? stake.amount : 0), 0) || 0;
+        
+        const { stakes, ...bookmarkWithoutStakes } = bookmark;
+        
+        return {
+          ...bookmarkWithoutStakes,
+          total_delegations: totalDelegations
+        };
+      });
+      
+      return {
+        statusCode: 200,
+        headers,
+        body: JSON.stringify({ bookmarks: processedData || [] })
+      };
+    }
+    
+    // For non-GET requests (POST, PUT, DELETE), require authentication
+    const authHeader = event.headers.authorization || '';
+    const token = authHeader.replace('Bearer ', '');
+    
+    if (!token) {
+      return {
+        statusCode: 401,
+        headers,
+        body: JSON.stringify({ error: 'Authentication required' })
+      };
     }
     
     // Decode token to get user ID
@@ -124,64 +322,6 @@ const handler: Handler = async (event) => {
     
     // Handle different HTTP methods
     switch (event.httpMethod) {
-      case 'GET': {
-        // Get bookmarks (either all bookmarks or user's bookmarks)
-        const userOnly = event.queryStringParameters?.userOnly === 'true';
-        const sortBy = event.queryStringParameters?.sortBy || 'created_at';
-        const limit = parseInt(event.queryStringParameters?.limit || '50');
-        
-        console.log('Fetching bookmarks with params:', { userOnly, sortBy, limit });
-        
-        let query = supabase
-          .from('books')
-          .select(`
-            *,
-            stakes(id, amount, user_id)
-          `);
-          
-        if (userOnly) {
-          query = query.eq('added_by', userId);
-        }
-        
-        // Apply sorting - avoid using total_delegations column which doesn't exist
-        query = query.order('created_at', { ascending: false });
-        
-        // Apply limit
-        query = query.limit(limit);
-        
-        const { data, error } = await query;
-
-        if (error) {
-          console.error('Error fetching bookmarks:', error);
-          return {
-            statusCode: 500,
-            headers,
-            body: JSON.stringify({ error: 'Error fetching bookmarks' })
-          };
-        }
-
-        // Process the data to calculate total delegations
-        const processedData = data?.map(bookmark => {
-          // Calculate total delegations from stakes
-          const totalDelegations = bookmark.stakes?.reduce((sum, stake) => 
-            sum + (typeof stake.amount === 'number' ? stake.amount : 0), 0) || 0;
-          
-          // Create a new object without the stakes array
-          const { stakes, ...bookmarkWithoutStakes } = bookmark;
-          
-          return {
-            ...bookmarkWithoutStakes,
-            total_delegations: totalDelegations
-          };
-        });
-
-        return {
-          statusCode: 200,
-          headers,
-          body: JSON.stringify({ bookmarks: processedData || [] })
-        };
-      }
-
       case 'POST': {
         // Create a new bookmark
         const bookmarkData = JSON.parse(event.body || '{}');

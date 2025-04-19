@@ -8,6 +8,8 @@ import { UserProfile } from "./components/UserProfile";
 import { BookmarkForm } from "./components/BookmarkForm";
 import { BookmarkList } from "./components/BookmarkList";
 import { useWallet } from "./contexts/WalletContext";
+// Import the BookmarkDetailPage component
+import BookmarkDetailPage from "./pages/BookmarkDetail";
 
 // Simple Home component
 function Home() {
@@ -137,6 +139,13 @@ function App() {
         <Route path="/profile" element={
           <ProtectedRoute>
             <ProfilePage />
+          </ProtectedRoute>
+        } />
+        
+        {/* Add the new route for bookmark details */}
+        <Route path="/bookmark/:id" element={
+          <ProtectedRoute>
+            <BookmarkDetailPage />
           </ProtectedRoute>
         } />
         

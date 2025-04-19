@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useWallet } from '../contexts/WalletContext';
 import { API_ENDPOINTS } from '../config/constants';
+import { Link } from 'react-router-dom';
 
 interface Bookmark {
   id: string;
@@ -208,110 +209,126 @@ export const BookmarkList = ({
         gap: '20px'
       }}>
         {bookmarks.map(bookmark => (
-          <div 
+          <Link 
             key={bookmark.id}
-            style={{
-              border: '1px solid #dee2e6',
-              borderRadius: '8px',
-              overflow: 'hidden',
-              backgroundColor: 'white',
-              boxShadow: '0 2px 4px rgba(0,0,0,0.05)'
-            }}
+            to={`/bookmark/${bookmark.id}`}
+            style={{ textDecoration: 'none', color: 'inherit' }}
           >
-            {bookmark.cover_url ? (
-              <div style={{ 
-                height: '180px', 
+            <div 
+              style={{
+                border: '1px solid #dee2e6',
+                borderRadius: '8px',
                 overflow: 'hidden',
-                backgroundColor: '#f8f9fa',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center'
-              }}>
-                <img 
-                  src={bookmark.cover_url} 
-                  alt={`Cover for ${bookmark.title}`}
-                  style={{ 
-                    width: '100%', 
-                    height: '100%', 
-                    objectFit: 'cover'
-                  }}
-                  onError={(e) => {
-                    // Replace with placeholder on error
-                    (e.target as HTMLImageElement).src = 'https://via.placeholder.com/300x180?text=No+Cover';
-                  }}
-                />
-              </div>
-            ) : (
-              <div style={{ 
-                height: '180px', 
-                backgroundColor: '#f8f9fa',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                color: '#6c757d'
-              }}>
-                No Cover Available
-              </div>
-            )}
-            
-            <div style={{ padding: '15px' }}>
-              <h3 style={{ 
-                margin: '0 0 8px 0',
-                fontSize: '18px',
-                fontWeight: 'bold',
-                color: '#212529'
-              }}>
-                {bookmark.title}
-              </h3>
-              
-              <p style={{ 
-                margin: '0 0 12px 0',
-                fontSize: '14px',
-                color: '#6c757d'
-              }}>
-                by {bookmark.author}
-              </p>
-              
-              {bookmark.description && (
-                <p style={{ 
-                  margin: '0 0 15px 0',
-                  fontSize: '14px',
-                  color: '#212529',
-                  display: '-webkit-box',
-                  WebkitLineClamp: 3,
-                  WebkitBoxOrient: 'vertical',
+                backgroundColor: 'white',
+                boxShadow: '0 2px 4px rgba(0,0,0,0.05)',
+                transition: 'transform 0.2s ease-in-out, box-shadow 0.2s ease-in-out',
+                cursor: 'pointer',
+                height: '100%'
+              }}
+              onMouseOver={(e) => {
+                e.currentTarget.style.transform = 'translateY(-5px)';
+                e.currentTarget.style.boxShadow = '0 5px 15px rgba(0,0,0,0.1)';
+              }}
+              onMouseOut={(e) => {
+                e.currentTarget.style.transform = 'translateY(0)';
+                e.currentTarget.style.boxShadow = '0 2px 4px rgba(0,0,0,0.05)';
+              }}
+            >
+              {bookmark.cover_url ? (
+                <div style={{ 
+                  height: '180px', 
                   overflow: 'hidden',
-                  textOverflow: 'ellipsis'
-                }}>
-                  {bookmark.description}
-                </p>
-              )}
-              
-              <div style={{ 
-                display: 'flex', 
-                justifyContent: 'space-between',
-                alignItems: 'center',
-                marginTop: '15px',
-                fontSize: '14px',
-                color: '#6c757d'
-              }}>
-                <span>
-                  Added: {new Date(bookmark.created_at).toLocaleDateString()}
-                </span>
-                
-                <span style={{ 
+                  backgroundColor: '#f8f9fa',
                   display: 'flex',
                   alignItems: 'center',
-                  gap: '5px',
-                  fontWeight: 'bold',
-                  color: bookmark.total_delegations ? '#28a745' : '#6c757d'
+                  justifyContent: 'center'
                 }}>
-                  <span>🔖</span>
-                  <span>{bookmark.total_delegations || 0}</span>
-                </span>
+                  <img 
+                    src={bookmark.cover_url} 
+                    alt={`Cover for ${bookmark.title}`}
+                    style={{ 
+                      width: '100%', 
+                      height: '100%', 
+                      objectFit: 'cover'
+                    }}
+                    onError={(e) => {
+                      // Replace with placeholder on error
+                      (e.target as HTMLImageElement).src = 'https://via.placeholder.com/300x180?text=No+Cover';
+                    }}
+                  />
+                </div>
+              ) : (
+                <div style={{ 
+                  height: '180px', 
+                  backgroundColor: '#f8f9fa',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  color: '#6c757d'
+                }}>
+                  No Cover Available
+                </div>
+              )}
+              
+              <div style={{ padding: '15px' }}>
+                <h3 style={{ 
+                  margin: '0 0 8px 0',
+                  fontSize: '18px',
+                  fontWeight: 'bold',
+                  color: '#212529'
+                }}>
+                  {bookmark.title}
+                </h3>
+                
+                <p style={{ 
+                  margin: '0 0 12px 0',
+                  fontSize: '14px',
+                  color: '#6c757d'
+                }}>
+                  by {bookmark.author}
+                </p>
+                
+                {bookmark.description && (
+                  <p style={{ 
+                    margin: '0 0 15px 0',
+                    fontSize: '14px',
+                    color: '#212529',
+                    display: '-webkit-box',
+                    WebkitLineClamp: 3,
+                    WebkitBoxOrient: 'vertical',
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis'
+                  }}>
+                    {bookmark.description}
+                  </p>
+                )}
+                
+                <div style={{ 
+                  display: 'flex', 
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                  marginTop: '15px',
+                  fontSize: '14px',
+                  color: '#6c757d'
+                }}>
+                  <span>
+                    Added: {new Date(bookmark.created_at).toLocaleDateString()}
+                  </span>
+                  
+                  <span style={{ 
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '5px',
+                    fontWeight: 'bold',
+                    color: bookmark.total_delegations ? '#28a745' : '#6c757d'
+                  }}>
+                    <span>🔖</span>
+                    <span>{bookmark.total_delegations || 0}</span>
+                  </span>
+                </div>
               </div>
             </div>
-          </div>
+          </Link>
         ))}
       </div>
     </div>
