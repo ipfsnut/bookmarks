@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useWallet } from '../contexts/WalletContext';
 import { API_ENDPOINTS } from '../config/constants';
+import StakedBalance from './StakedBalance';
 
 export const UserProfile = () => {
   const { isAuthenticated, sessionToken } = useWallet();
@@ -278,34 +279,13 @@ export const UserProfile = () => {
             Profile updated successfully!
           </div>
         )}
-      </div>
+  </div>
       
-      {/* Token Balance */}
-      <div style={{ marginBottom: '20px' }}>
-        <h3 style={{ fontSize: '16px', color: '#495057', marginBottom: '8px' }}>Token Balance</h3>
-        <div style={{ 
-          padding: '10px',
-          backgroundColor: '#e9ecef',
-          borderRadius: '4px',
-          display: 'flex',
-          alignItems: 'center'
-        }}>
-          <span style={{ 
-            fontSize: '18px', 
-            fontWeight: 'bold',
-            color: '#212529'
-          }}>
-            {userData?.token_balance || 0}
-          </span>
-          <span style={{ 
-            marginLeft: '8px',
-            color: '#6c757d',
-            fontSize: '14px'
-          }}>
-            tokens
-          </span>
-        </div>
-      </div>
+  {/* Token Balance */}
+  <div style={{ marginBottom: '20px' }}>
+    <h3 style={{ fontSize: '16px', color: '#495057', marginBottom: '8px' }}>Token Balance</h3>
+    <StakedBalance address={userData?.wallet_address} />
+  </div>
       
       {/* Account Info */}
       <div style={{ marginBottom: '20px' }}>

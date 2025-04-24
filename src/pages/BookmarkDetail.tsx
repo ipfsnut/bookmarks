@@ -1,8 +1,13 @@
 import React from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useParams } from 'react-router-dom';
 import BookmarkDetail from '../components/BookmarkDetail';
+import StakedBalance from '../components/StakedBalance';
+import { useAccount } from 'wagmi';
 
 const BookmarkDetailPage: React.FC = () => {
+  const { id } = useParams<{ id: string }>();
+  const { address } = useAccount();
+
   return (
     <div className="min-h-screen bg-gray-100">
       <div className="py-4 px-6 bg-white shadow mb-6">
@@ -24,6 +29,13 @@ const BookmarkDetailPage: React.FC = () => {
           </div>
         </div>
       </div>
+      
+      {/* Add the StakedBalance component if user is connected */}
+      {address && (
+        <div className="container mx-auto mb-6">
+          <StakedBalance />
+        </div>
+      )}
       
       <BookmarkDetail />
     </div>

@@ -7,7 +7,6 @@ interface DelegationControlsProps {
 }
 
 export const DelegationControls: React.FC<DelegationControlsProps> = ({ bookmarkId, currentStake }) => {
-  // Fix: Check what properties are actually available in WalletContext
   const wallet = useWallet();
   const [stakeAmount, setStakeAmount] = useState<number>(1);
   const [isStaking, setIsStaking] = useState<boolean>(false);
@@ -75,7 +74,7 @@ export const DelegationControls: React.FC<DelegationControlsProps> = ({ bookmark
       </button>
       
       <p className="mt-2 text-xs text-gray-500">
-        By staking tokens, you're signaling this book's quality to the community.
+        By staking tokens, you're signaling this bookmark's quality to the community.
       </p>
     </div>
   );

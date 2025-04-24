@@ -9,7 +9,7 @@ export type Json =
 export interface Database {
   public: {
     Tables: {
-      books: {
+      bookmarks: {
         Row: {
           id: string
           title: string
@@ -100,7 +100,7 @@ export interface Database {
         Row: {
           id: string
           user_id: string
-          book_id: string
+          bookmark_id: string
           amount: number
           created_at: string
           updated_at: string
@@ -108,7 +108,7 @@ export interface Database {
         Insert: {
           id?: string
           user_id: string
-          book_id: string
+          bookmark_id: string
           amount: number
           created_at?: string
           updated_at?: string
@@ -116,7 +116,7 @@ export interface Database {
         Update: {
           id?: string
           user_id?: string
-          book_id?: string
+          bookmark_id?: string
           amount?: number
           created_at?: string
           updated_at?: string

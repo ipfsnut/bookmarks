@@ -159,7 +159,7 @@ const handler: Handler = async (event) => {
         
         // Fetch user-specific bookmarks
         let query = supabase
-          .from('books')
+          .from('bookmarks')
           .select(`
             *,
             stakes(id, amount, user_id)
@@ -206,7 +206,7 @@ const handler: Handler = async (event) => {
       // If fetching a specific bookmark by ID
       if (bookmarkId) {
         const { data, error } = await supabase
-          .from('books')
+          .from('bookmarks')
           .select(`
             *,
             stakes(id, amount, user_id)
@@ -251,7 +251,7 @@ const handler: Handler = async (event) => {
       
       // If fetching all bookmarks (public access)
       let query = supabase
-        .from('books')
+        .from('bookmarks')
         .select(`
           *,
           stakes(id, amount, user_id)
@@ -356,7 +356,7 @@ const handler: Handler = async (event) => {
         };
         
         const { data, error } = await supabase
-          .from('books')
+          .from('bookmarks')
           .insert([newBookmark])
           .select()
           .single();
@@ -376,6 +376,157 @@ const handler: Handler = async (event) => {
           statusCode: 201,
           headers,
           body: JSON.stringify(data)
+        };
+      }
+
+      case 'PUT': {
+        // Update an existing bookmark
+        const bookmarkId = event.queryStringParameters?.id;
+        
+        if (!bookmarkId) {
+          return {
+            statusCode: 400,
+            headers,
+            body: JSON.stringify({ error: 'Bookmark ID is required' })
+          };
+        }
+        
+        // First, verify the user owns this bookmark
+        const { data: existingBookmark, error: fetchError } = await supabase
+          .from('bookmarks')
+          .select('added_by')
+          .eq('id', bookmarkId)
+          .single();
+        
+        if (fetchError) {
+          console.error('Error fetching bookmark for update:', fetchError);
+          return {
+            statusCode: 500,
+            headers,
+            body: JSON.stringify({ error: 'Error fetching bookmark for update' })
+          };
+        }
+        
+        if (!existingBookmark) {
+          return {
+            statusCode: 404,
+            headers,
+            body: JSON.stringify({ error: 'Bookmark not found' })
+          };
+        }
+        
+        // Check ownership
+        if (existingBookmark.added_by !== userId) {
+          return {
+            statusCode: 403,
+            headers,
+            body: JSON.stringify({ error: 'You do not have permission to update this bookmark' })
+          };
+        }
+        
+        // Get update data
+        const updateData = JSON.parse(event.body || '{}');
+        
+        // Filter to allowed fields
+        const allowedFields = ['title', 'author', 'description', 'cover_url', 'bisac_codes'];
+        const filteredUpdate = Object.keys(updateData)
+          .filter(key => allowedFields.includes(key))
+          .reduce((obj, key) => {
+            obj[key] = updateData[key];
+            return obj;
+          }, {});
+        
+        // Add updated_at timestamp
+        filteredUpdate['updated_at'] = new Date().toISOString();
+        
+        // Perform update
+        const { data, error } = await supabase
+          .from('bookmarks')
+          .update(filteredUpdate)
+          .eq('id', bookmarkId)
+          .select()
+          .single();
+        
+        if (error) {
+          console.error('Error updating bookmark:', error);
+          return {
+            statusCode: 500,
+            headers,
+            body: JSON.stringify({ error: 'Error updating bookmark' })
+          };
+        }
+        
+        return {
+          statusCode: 200,
+          headers,
+          body: JSON.stringify(data)
+        };
+      }
+
+      case 'DELETE': {
+        // Delete a bookmark
+        const bookmarkId = event.queryStringParameters?.id;
+        
+        if (!bookmarkId) {
+          return {
+            statusCode: 400,
+            headers,
+            body: JSON.stringify({ error: 'Bookmark ID is required' })
+          };
+        }
+        
+        // First, verify the user owns this bookmark
+        const { data: existingBookmark, error: fetchError } = await supabase
+          .from('bookmarks')
+          .select('added_by')
+          .eq('id', bookmarkId)
+          .single();
+        
+        if (fetchError && fetchError.code !== 'PGRST116') { // Not found error
+          console.error('Error fetching bookmark for deletion:', fetchError);
+          return {
+            statusCode: 500,
+            headers,
+            body: JSON.stringify({ error: 'Error fetching bookmark for deletion' })
+          };
+        }
+        
+        if (!existingBookmark) {
+          return {
+            statusCode: 404,
+            headers,
+            body: JSON.stringify({ error: 'Bookmark not found' })
+          };
+        }
+        
+        // Check ownership
+        if (existingBookmark.added_by !== userId) {
+          return {
+            statusCode: 403,
+            headers,
+            body: JSON.stringify({ error: 'You do not have permission to delete this bookmark' })
+          };
+        }
+        
+        // Perform deletion
+        const { error } = await supabase
+          .from('bookmarks')
+          .delete()
+          .eq('id', bookmarkId);
+        
+        if (error) {
+          console.error('Error deleting bookmark:', error);
+          return {
+            statusCode: 500,
+            headers,
+            body: JSON.stringify({ error: 'Error deleting bookmark' })
+          };
+        }
+        
+        return {
+          statusCode: 200,
+          headers,
+          body: JSON.stringify({ success: true })
         };
       }
 

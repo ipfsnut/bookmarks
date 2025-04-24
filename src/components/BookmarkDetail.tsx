@@ -1,20 +1,16 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { useWallet } from '../contexts/WalletContext';
-// Fix: Create a proper type or import it from the correct location
 import { Bookmark } from '../types/bookmark.types';
-// Fix: Ensure this service function exists
 import { fetchBookmarkById } from '../services/bookmark.service';
-// Fix: Make sure these packages are installed
 import { FaExternalLinkAlt, FaBook, FaPodcast, FaYoutube, FaEthereum } from 'react-icons/fa';
 import { SiIpfs } from 'react-icons/si';
-
-// Fix: Import the DelegationControls component
 import { DelegationControls } from './DelegationControls';
+import StakedBalance from './StakedBalance';
+
 
 const BookmarkDetail: React.FC = () => {
   const { id } = useParams<{ id: string }>();
-  // Fix: Use the correct property from WalletContext
   const wallet = useWallet();
   const [bookmark, setBookmark] = useState<Bookmark | null>(null);
   const [loading, setLoading] = useState<boolean>(true);

@@ -25,6 +25,9 @@ export const API_ENDPOINTS = {
   AWARD_TOKENS: `${API_BASE}/award-tokens`,
   BOOKMARKS: `${API_BASE}/bookmarks`,
   BISAC_CODES: '/.netlify/functions/bisac-codes'
-};// Contract Constants - to be filled with actual addresses when deployed
+};
+
+// Contract Constants - to be filled with actual addresses when deployed
 export const CONTRACT_CONSTANTS = {
-  BOOKMARK_CONTRACT_ADDRESS: import.meta.env.VITE_BOOKMARK_CONTRACT_ADDRESS || '0x0000000000000000000000000000000000000000'};
+  BOOKMARK_CONTRACT_ADDRESS: import.meta.env.VITE_BOOKMARK_CONTRACT_ADDRESS || '0x6A9e955499c37f7e725060bfDB00257010E95b41'
+};
