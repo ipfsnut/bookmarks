@@ -8,8 +8,9 @@ import { UserProfile } from "./components/UserProfile";
 import { BookmarkForm } from "./components/BookmarkForm";
 import { BookmarkList } from "./components/BookmarkList";
 import { useWallet } from "./contexts/WalletContext";
-// Import the BookmarkDetailPage component
 import BookmarkDetailPage from "./pages/BookmarkDetail";
+import TokenManagementPage from "./pages/TokenManagement";
+import LeaderboardPage from "./pages/LeaderboardPage";
 
 // Simple Home component
 function Home() {
@@ -45,6 +46,8 @@ function Dashboard() {
         <Link to="/bookmarks">Browse Bookmarks</Link>
         <Link to="/my-bookmarks">My Bookmarks</Link>
         <Link to="/add-bookmark">Add Bookmark</Link>
+        <Link to="/tokens">Manage Tokens</Link>
+        <Link to="/leaderboard">Leaderboard</Link>
         <Link to="/profile">My Profile</Link>
       </nav>
       
@@ -146,6 +149,19 @@ function App() {
         <Route path="/bookmark/:id" element={
           <ProtectedRoute>
             <BookmarkDetailPage />
+          </ProtectedRoute>
+        } />
+        
+        {/* Add the new route for token management */}
+        <Route path="/tokens" element={
+          <ProtectedRoute>
+            <TokenManagementPage />
+          </ProtectedRoute>
+        } />
+        
+        <Route path="/leaderboard" element={
+          <ProtectedRoute>
+            <LeaderboardPage />
           </ProtectedRoute>
         } />
         

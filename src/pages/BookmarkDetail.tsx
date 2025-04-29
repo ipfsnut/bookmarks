@@ -2,6 +2,7 @@ import React from 'react';
 import { Link, useParams } from 'react-router-dom';
 import BookmarkDetail from '../components/BookmarkDetail';
 import StakedBalance from '../components/StakedBalance';
+import { BookmarkVote } from '../components/BookmarkVote';
 import { useAccount } from 'wagmi';
 
 const BookmarkDetailPage: React.FC = () => {
@@ -37,7 +38,18 @@ const BookmarkDetailPage: React.FC = () => {
         </div>
       )}
       
-      <BookmarkDetail />
+      <div className="container mx-auto">
+        <div className="bg-white rounded-lg shadow p-6 mb-6">
+          <BookmarkDetail />
+        </div>
+        
+        {/* Add the voting component if user is connected */}
+        {address && id && (
+          <div className="bg-white rounded-lg shadow p-6">
+            <BookmarkVote bookmarkId={id} />
+          </div>
+        )}
+      </div>
     </div>
   );
 };
