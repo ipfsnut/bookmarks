@@ -65,11 +65,14 @@ function useContract(address: string, abi: any[]): Contract | null {
 
 // Helper function to cache contract call results
 async function cachedContractCall<T>(
-  contract: Contract | null,
+  contract: Contract | null,  // Use Contract instead of ethers.Contract
   method: string,
   args: any[] = []
-): Promise<T | null> {
-  if (!contract) return null;
+): Promise<T> {
+  if (!contract) {
+    console.warn(`Contract is null when calling ${method}`);
+    return null as unknown as T;
+  }
   
   const cacheKey = `${contract.target}_${method}_${JSON.stringify(args)}`;
   const cachedResult = resultCache.get(cacheKey);
@@ -93,7 +96,7 @@ async function cachedContractCall<T>(
     return result;
   } catch (error) {
     console.error(`Error calling ${method}:`, error);
-    return null;
+    throw error;
   }
 }
 
@@ -188,5 +191,22 @@ export const parseToBigInt = (value: string, decimals: number = 18): BigNumberis
   }
 };
 
-// Export the cached contract call helper
+// Add the clearContractCallCache function
+export function clearContractCallCache(methodPattern?: string): void {
+  if (methodPattern) {
+    // Clear specific method calls
+    for (const key of resultCache.keys()) {
+      if (key.includes(methodPattern)) {
+        resultCache.delete(key);
+      }
+    }
+    console.log(`Cleared cache for methods matching: ${methodPattern}`);
+  } else {
+    // Clear all cache
+    resultCache.clear();
+    console.log('Cleared all contract call cache');
+  }
+}
+
+// Export the cachedContractCall function
 export { cachedContractCall };

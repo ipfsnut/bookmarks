@@ -4,7 +4,7 @@ import { base, mainnet } from "wagmi/chains";
 import { injected } from "wagmi/connectors";
 
 const BASE_RPC_URLS = [
-  'https://base.meowrpc.com',              // MeowRPC (reliable public endpoint)
+  'https://mainnet.base.org',              // Base public access endpoint (reliable public endpoint)
   'https://base.drpc.org',                 // DRPC (decentralized RPC)
   'https://base-mainnet.g.alchemy.com/v2/demo', // Alchemy demo key (limited but works)
   'https://base.gateway.tenderly.co',      // Tenderly gateway
