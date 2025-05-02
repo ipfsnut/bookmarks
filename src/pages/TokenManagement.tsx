@@ -6,6 +6,7 @@ import {
   useNSIToken
 } from '../utils/contracts';
 import TokenActions from '../components/TokenActions';
+import UnbondingRequests from '../components/UnbondingRequests';
 
 // Helper function to format token amounts nicely
 const formatTokenAmount = (amount: string): string => {
@@ -237,11 +238,48 @@ const TokenManagementPage: React.FC = () => {
       
       {/* Use the existing TokenActions component */}
       {address && (
-        <TokenActions 
-          address={address} 
-          onSuccess={refreshBalances} 
-        />
+        <div style={{ marginBottom: '30px' }}>
+          <TokenActions 
+            address={address} 
+            onSuccess={refreshBalances} 
+          />
+        </div>
       )}
+      
+      {/* Add the new UnbondingRequests component */}
+      {address && (
+        <div style={{ marginBottom: '30px' }}>
+          <UnbondingRequests onSuccess={refreshBalances} />
+        </div>
+      )}
+      
+      {/* Information about tokens */}
+      <div style={{ 
+        marginTop: '20px', 
+        padding: '15px', 
+        backgroundColor: '#f8f9fa', 
+        borderRadius: '8px',
+        border: '1px solid #dee2e6',
+        fontSize: '14px'
+      }}>
+        <h3 style={{ marginTop: 0 }}>About Tokens</h3>
+        <p>
+          <strong>NSI Tokens:</strong> The native token of the platform. These can be wrapped into wNSI tokens for voting.
+        </p>
+        <p>
+          <strong>wNSI Tokens:</strong> Wrapped NSI tokens that provide voting power. These cannot be transferred directly 
+          but can be unwrapped back to NSI tokens after a 7-day unbonding period.
+        </p>
+        <p>
+          <strong>Voting Power:</strong> Your available voting power is determined by your wNSI balance minus any votes 
+          you've already cast in the current voting cycle.
+        </p>
+        <p>
+          <strong>Unbonding Period:</strong> When you request to unwrap wNSI tokens, they enter a 7-day unbonding period. 
+          During this time, they cannot be used for voting. After the unbonding period ends, you need to complete the 
+          unwrapping process to receive your NSI tokens.
+        </p>
+      </div>
       
       {/* Debug info */}
       <div style={{ 

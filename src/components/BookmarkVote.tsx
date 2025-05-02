@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useAccount } from 'wagmi';
-import { getUserStakedBalance } from '../services/blockchain';
-import { supabase } from '../config/supabase';
+import { useBookmarkVoting, useCardCatalog, formatBigInt, parseToBigInt } from '../utils/contracts';
+import { ethers } from 'ethers';
 
 interface BookmarkVoteProps {
   bookmarkId: string;
@@ -9,124 +9,140 @@ interface BookmarkVoteProps {
 
 export function BookmarkVote({ bookmarkId }: BookmarkVoteProps) {
   const { address } = useAccount();
-  const [lockedBalance, setLockedBalance] = useState('0');
-  const [currentVotes, setCurrentVotes] = useState(0);
-  const [userVotes, setUserVotes] = useState(0);
-  const [voteAmount, setVoteAmount] = useState(0);
-  const [isVoting, setIsVoting] = useState(false);
-  const [error, setError] = useState('');
-  const [success, setSuccess] = useState('');
-  const [weeklyReset, setWeeklyReset] = useState('');
+  const bookmarkVoting = useBookmarkVoting();
+  const cardCatalog = useCardCatalog();
+  
+  const [totalVotes, setTotalVotes] = useState<string>('0');
+  const [userVotes, setUserVotes] = useState<string>('0');
+  const [remainingVotingPower, setRemainingVotingPower] = useState<string>('0');
+  const [voteAmount, setVoteAmount] = useState<string>('1');
+  const [isVoting, setIsVoting] = useState<boolean>(false);
+  const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState<string | null>(null);
+  const [timeRemaining, setTimeRemaining] = useState<string>('');
+  const [currentCycle, setCurrentCycle] = useState<number>(0);
+  const [isLoading, setIsLoading] = useState<boolean>(true);
 
-  // Calculate time until weekly reset (Sunday)
+  // Calculate time remaining in current cycle
   useEffect(() => {
-    const calculateTimeUntilReset = () => {
-      const now = new Date();
-      const dayOfWeek = now.getDay(); // 0 = Sunday, 1 = Monday, etc.
-      const daysUntilSunday = dayOfWeek === 0 ? 7 : 7 - dayOfWeek;
-      const nextSunday = new Date(now);
-      nextSunday.setDate(now.getDate() + daysUntilSunday);
-      nextSunday.setHours(0, 0, 0, 0);
-      
-      const timeUntilReset = nextSunday.getTime() - now.getTime();
-      const days = Math.floor(timeUntilReset / (1000 * 60 * 60 * 24));
-      const hours = Math.floor((timeUntilReset % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
-      
-      return `${days}d ${hours}h until votes reset`;
+    if (!bookmarkVoting) return;
+    
+    const updateTimeRemaining = async () => {
+      try {
+        const timeRemainingSeconds = await bookmarkVoting.getTimeRemainingInCurrentCycle();
+        const days = Math.floor(Number(timeRemainingSeconds) / (24 * 60 * 60));
+        const hours = Math.floor((Number(timeRemainingSeconds) % (24 * 60 * 60)) / (60 * 60));
+        const minutes = Math.floor((Number(timeRemainingSeconds) % (60 * 60)) / 60);
+        
+        setTimeRemaining(`${days}d ${hours}h ${minutes}m until votes reset`);
+      } catch (err) {
+        console.error('Error fetching time remaining:', err);
+        setTimeRemaining('Unable to fetch time remaining');
+      }
     };
     
-    setWeeklyReset(calculateTimeUntilReset());
-    const interval = setInterval(() => {
-      setWeeklyReset(calculateTimeUntilReset());
-    }, 3600000); // Update every hour
+    updateTimeRemaining();
     
-    return () => clearInterval(interval);
-  }, []);
+    // Update every minute
+    const intervalId = setInterval(updateTimeRemaining, 60000);
+    
+    return () => clearInterval(intervalId);
+  }, [bookmarkVoting]);
 
-  // Fetch user's locked balance and current votes
+  // Fetch voting data
   useEffect(() => {
-    if (!address || !bookmarkId) return;
+    if (!address || !bookmarkId || !bookmarkVoting) return;
 
     const fetchData = async () => {
+      setIsLoading(true);
+      setError(null);
+      
       try {
-        // Get user's locked balance (wNSI)
-        const balance = await getUserStakedBalance(address);
-        setLockedBalance(balance);
+        // Convert bookmarkId from string to BigNumber
+        const tokenId = ethers.toBigInt(bookmarkId);
         
         // Get total votes for this bookmark
-        const { data: votesData, error: votesError } = await supabase
-          .from('stakes')
-          .select('amount')
-          .eq('bookmark_id', bookmarkId);
-          
-        if (votesError) throw votesError;
-        
-        const totalVotes = votesData?.reduce((sum, vote) => sum + (vote.amount || 0), 0) || 0;
-        setCurrentVotes(totalVotes);
+        const totalVotesRaw = await bookmarkVoting.getBookmarkVotes(tokenId);
+        setTotalVotes(formatBigInt(totalVotesRaw));
         
         // Get user's votes for this bookmark
-        const { data: userVotesData, error: userVotesError } = await supabase
-          .from('stakes')
-          .select('amount')
-          .eq('bookmark_id', bookmarkId)
-          .eq('user_id', address)
-          .single();
-          
-        if (userVotesError && userVotesError.code !== 'PGRST116') throw userVotesError;
+        const userVotesRaw = await bookmarkVoting.getUserVotesForBookmark(address, tokenId);
+        setUserVotes(formatBigInt(userVotesRaw));
         
-        setUserVotes(userVotesData?.amount || 0);
+        // Get user's remaining voting power
+        const votingPowerRaw = await bookmarkVoting.getRemainingVotingPower(address);
+        setRemainingVotingPower(formatBigInt(votingPowerRaw));
+        
+        // Get current voting cycle
+        const cycle = await bookmarkVoting.getCurrentCycle();
+        setCurrentCycle(Number(cycle));
       } catch (err) {
         console.error('Error fetching vote data:', err);
+        setError('Failed to load voting data. Please try again.');
+      } finally {
+        setIsLoading(false);
       }
     };
 
     fetchData();
-  }, [address, bookmarkId]);
+    
+    // Refresh every 30 seconds
+    const intervalId = setInterval(fetchData, 30000);
+    
+    return () => clearInterval(intervalId);
+  }, [address, bookmarkId, bookmarkVoting]);
 
   const handleVote = async () => {
-    if (!address || !bookmarkId) {
+    if (!address || !bookmarkId || !bookmarkVoting) {
       setError('Please connect your wallet');
       return;
     }
 
-    if (voteAmount <= 0) {
+    if (!voteAmount || parseFloat(voteAmount) <= 0) {
       setError('Please enter a valid vote amount');
       return;
     }
 
-    const availableVotes = parseFloat(lockedBalance) - userVotes;
-    if (voteAmount > availableVotes) {
-      setError(`You only have ${availableVotes} votes available`);
+    const voteAmountNum = parseFloat(voteAmount);
+    const remainingPower = parseFloat(remainingVotingPower);
+    
+    if (voteAmountNum > remainingPower) {
+      setError(`You only have ${remainingPower} voting power available`);
       return;
     }
 
     try {
       setIsVoting(true);
-      setError('');
-      setSuccess('');
+      setError(null);
+      setSuccess(null);
 
-      // Record vote in Supabase
-      const newVoteAmount = userVotes + voteAmount;
+      // Convert bookmarkId from string to BigNumber
+      const tokenId = ethers.toBigInt(bookmarkId);
       
-      const { error: upsertError } = await supabase
-        .from('stakes')
-        .upsert({
-          user_id: address,
-          bookmark_id: bookmarkId,
-          amount: newVoteAmount,
-          updated_at: new Date().toISOString()
-        }, {
-          onConflict: 'user_id,bookmark_id'
-        });
-        
-      if (upsertError) throw upsertError;
+      // Convert vote amount to the correct format for the contract
+      const voteAmountBigInt = parseToBigInt(voteAmount);
+      
+      // Call the delegateVotes function on the contract
+      const tx = await bookmarkVoting.delegateVotes(tokenId, voteAmountBigInt);
+      
+      setSuccess('Transaction submitted. Waiting for confirmation...');
+      
+      // Wait for the transaction to be mined
+      await tx.wait();
       
       // Update UI
-      setUserVotes(newVoteAmount);
-      setCurrentVotes(currentVotes + voteAmount);
-      setVoteAmount(0);
+      const newTotalVotes = (parseFloat(totalVotes) + voteAmountNum).toString();
+      setTotalVotes(newTotalVotes);
+      
+      const newUserVotes = (parseFloat(userVotes) + voteAmountNum).toString();
+      setUserVotes(newUserVotes);
+      
+      // Update remaining voting power
+      const newVotingPower = await bookmarkVoting.getRemainingVotingPower(address);
+      setRemainingVotingPower(formatBigInt(newVotingPower));
       
       setSuccess(`Successfully voted with ${voteAmount} tokens`);
+      setVoteAmount('1'); // Reset input field
     } catch (err) {
       console.error('Error voting:', err);
       setError('Failed to submit vote. Please try again.');
@@ -134,9 +150,77 @@ export function BookmarkVote({ bookmarkId }: BookmarkVoteProps) {
       setIsVoting(false);
     }
   };
+  
+  const handleUnvote = async () => {
+    if (!address || !bookmarkId || !bookmarkVoting) {
+      setError('Please connect your wallet');
+      return;
+    }
+
+    if (!voteAmount || parseFloat(voteAmount) <= 0) {
+      setError('Please enter a valid amount');
+      return;
+    }
+
+    const voteAmountNum = parseFloat(voteAmount);
+    const currentVotes = parseFloat(userVotes);
+    
+    if (voteAmountNum > currentVotes) {
+      setError(`You only have ${currentVotes} tokens locked in`);
+      return;
+    }
+
+    try {
+      setIsVoting(true);
+      setError(null);
+      setSuccess(null);
+
+      // Convert bookmarkId from string to BigNumber
+      const tokenId = ethers.toBigInt(bookmarkId);
+      
+      // Convert vote amount to the correct format for the contract
+      const voteAmountBigInt = parseToBigInt(voteAmount);
+      
+      // Call the undelegateVotes function on the contract
+      const tx = await bookmarkVoting.undelegateVotes(tokenId, voteAmountBigInt);
+      
+      setSuccess('Transaction submitted. Waiting for confirmation...');
+      
+      // Wait for the transaction to be mined
+      await tx.wait();
+      
+      // Update UI
+      const newTotalVotes = (parseFloat(totalVotes) - voteAmountNum).toString();
+      setTotalVotes(newTotalVotes);
+      
+      const newUserVotes = (currentVotes - voteAmountNum).toString();
+      setUserVotes(newUserVotes);
+      
+      // Update remaining voting power
+      const newVotingPower = await bookmarkVoting.getRemainingVotingPower(address);
+      setRemainingVotingPower(formatBigInt(newVotingPower));
+      
+      setSuccess(`Successfully unlocked ${voteAmount} tokens`);
+      setVoteAmount('1'); // Reset input field
+    } catch (err) {
+      console.error('Error unvoting:', err);
+      setError('Failed to unlock tokens. Please try again.');
+    } finally {
+      setIsVoting(false);
+    }
+  };
 
   if (!address) {
-    return <div>Please connect your wallet to vote.</div>;
+    return <div className="text-center p-4">Please connect your wallet to vote.</div>;
+  }
+  
+  if (isLoading) {
+    return (
+      <div className="text-center p-4">
+        <div className="inline-block animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-blue-500 mb-2"></div>
+        <p>Loading voting data...</p>
+      </div>
+    );
   }
 
   return (
@@ -146,7 +230,7 @@ export function BookmarkVote({ bookmarkId }: BookmarkVoteProps) {
       <div className="grid grid-cols-3 gap-4 mb-6">
         <div className="bg-gray-50 p-4 rounded-md">
           <h3 className="text-sm font-medium text-gray-500">Current Votes</h3>
-          <p className="text-2xl font-bold text-gray-800">{currentVotes}</p>
+          <p className="text-2xl font-bold text-gray-800">{totalVotes}</p>
         </div>
         <div className="bg-gray-50 p-4 rounded-md">
           <h3 className="text-sm font-medium text-gray-500">Your Votes</h3>
@@ -154,12 +238,13 @@ export function BookmarkVote({ bookmarkId }: BookmarkVoteProps) {
         </div>
         <div className="bg-gray-50 p-4 rounded-md">
           <h3 className="text-sm font-medium text-gray-500">Available Voting Power</h3>
-          <p className="text-2xl font-bold text-gray-800">{Math.max(0, parseFloat(lockedBalance) - userVotes)}</p>
+          <p className="text-2xl font-bold text-gray-800">{remainingVotingPower}</p>
         </div>
       </div>
       
       <div className="bg-blue-50 text-blue-700 p-3 rounded-md mb-6">
-        <p className="text-sm font-medium">{weeklyReset}</p>
+        <p className="text-sm font-medium">{timeRemaining}</p>
+        <p className="text-sm font-medium">Current Voting Cycle: {currentCycle}</p>
       </div>
       
       {error && (
@@ -174,23 +259,38 @@ export function BookmarkVote({ bookmarkId }: BookmarkVoteProps) {
         </div>
       )}
       
-      <div className="flex space-x-4 mb-6">
+      <div className="mb-4">
+        <label htmlFor="voteAmount" className="block text-sm font-medium text-gray-700 mb-1">
+          Amount
+        </label>
         <input
           type="number"
-          value={voteAmount || ''}
-          onChange={(e) => setVoteAmount(parseInt(e.target.value) || 0)}
-          placeholder="Number of votes"
-          min="1"
-          max={Math.max(0, parseFloat(lockedBalance) - userVotes)}
+          id="voteAmount"
+          value={voteAmount}
+          onChange={(e) => setVoteAmount(e.target.value)}
+          placeholder="Enter amount"
+          min="0.1"
+          step="0.1"
           disabled={isVoting}
-          className="flex-1 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
         />
+      </div>
+      
+      <div className="flex space-x-4 mb-6">
         <button 
           onClick={handleVote} 
-          disabled={isVoting || voteAmount <= 0 || voteAmount > (parseFloat(lockedBalance) - userVotes)}
-          className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50"
+          disabled={isVoting || parseFloat(remainingVotingPower) <= 0}
+          className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50"
         >
-          {isVoting ? 'Voting...' : 'Submit Votes'}
+          {isVoting ? 'Processing...' : 'Lock In Tokens'}
+        </button>
+        
+        <button 
+          onClick={handleUnvote} 
+          disabled={isVoting || parseFloat(userVotes) <= 0}
+          className="flex-1 px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-red-500 disabled:opacity-50"
+        >
+          {isVoting ? 'Processing...' : 'Unlock Tokens'}
         </button>
       </div>
       

@@ -1,7 +1,9 @@
 import { useState, useEffect } from 'react';
 import { useWallet } from '../contexts/WalletContext';
+import { useBookmarkNFT } from '../utils/contracts';
 import { API_ENDPOINTS } from '../config/constants';
 import { Link } from 'react-router-dom';
+import { useAccount } from 'wagmi';
 
 interface Bookmark {
   id: string;
@@ -13,26 +15,48 @@ interface Bookmark {
   created_at: string;
   updated_at: string;
   total_delegations?: number;
+  token_id?: string;
+  owner_address?: string;
 }
 
 interface BookmarkListProps {
   userOnly?: boolean;
   limit?: number;
-  sortBy?: 'created_at' | 'delegations';
+  sortBy?: 'created_at' | 'delegations' | 'token_id';
+  filterNFTs?: 'all' | 'owned' | 'not-owned';
 }
 
 export const BookmarkList = ({ 
   userOnly = false, 
   limit = 50,
-  sortBy = 'created_at'
+  sortBy = 'created_at',
+  filterNFTs = 'all'
 }: BookmarkListProps) => {
   const { sessionToken } = useWallet();
+  const { address } = useAccount();
+  const bookmarkNFT = useBookmarkNFT();
+  
   const [bookmarks, setBookmarks] = useState<Bookmark[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
-  const [currentSort, setCurrentSort] = useState<'created_at' | 'delegations'>(
-    sortBy === 'delegations' ? 'delegations' : 'created_at'
+  const [currentSort, setCurrentSort] = useState<'created_at' | 'delegations' | 'token_id'>(
+    sortBy === 'delegations' ? 'delegations' : 
+    sortBy === 'token_id' ? 'token_id' : 'created_at'
   );
+  const [currentFilter, setCurrentFilter] = useState<'all' | 'owned' | 'not-owned'>(filterNFTs);
+  
+  // Function to check if user owns a specific NFT
+  const checkNFTOwnership = async (tokenId: string): Promise<boolean> => {
+    if (!bookmarkNFT || !address || !tokenId) return false;
+    
+    try {
+      const owner = await bookmarkNFT.ownerOf(tokenId);
+      return owner.toLowerCase() === address.toLowerCase();
+    } catch (error) {
+      console.error(`Error checking ownership of token ${tokenId}:`, error);
+      return false;
+    }
+  };
   
   const fetchBookmarks = async () => {
     if (!sessionToken) {
@@ -49,6 +73,7 @@ export const BookmarkList = ({
       if (userOnly) queryParams.append('userOnly', 'true');
       queryParams.append('sortBy', currentSort);
       queryParams.append('limit', limit.toString());
+      queryParams.append('includeNFTData', 'true'); // Request NFT data
       
       const response = await fetch(`${API_ENDPOINTS.BOOKMARKS}?${queryParams.toString()}`, {
         method: 'GET',
@@ -65,7 +90,39 @@ export const BookmarkList = ({
       }
       
       const data = await response.json();
-      setBookmarks(data.bookmarks || []);
+      let fetchedBookmarks = data.bookmarks || [];
+      
+      // If we have a connected wallet and bookmarkNFT contract, enhance with ownership data
+      if (bookmarkNFT && address) {
+        // For each bookmark with a token_id, check ownership
+        const enhancedBookmarks = await Promise.all(
+          fetchedBookmarks.map(async (bookmark: Bookmark) => {
+            if (bookmark.token_id) {
+              const isOwner = await checkNFTOwnership(bookmark.token_id);
+              return {
+                ...bookmark,
+                owner_address: isOwner ? address : bookmark.owner_address
+              };
+            }
+            return bookmark;
+          })
+        );
+        
+        fetchedBookmarks = enhancedBookmarks;
+      }
+      
+      // Apply NFT filtering if needed
+      if (currentFilter !== 'all' && address) {
+        fetchedBookmarks = fetchedBookmarks.filter((bookmark: Bookmark) => {
+          // Only include bookmarks with token_id (they are NFTs)
+          if (!bookmark.token_id) return false;
+          
+          const isOwned = bookmark.owner_address?.toLowerCase() === address.toLowerCase();
+          return currentFilter === 'owned' ? isOwned : !isOwned;
+        });
+      }
+      
+      setBookmarks(fetchedBookmarks);
     } catch (err) {
       console.error('Error fetching bookmarks:', err);
       setError(err instanceof Error ? err.message : 'Failed to fetch bookmarks');
@@ -76,64 +133,44 @@ export const BookmarkList = ({
   
   useEffect(() => {
     fetchBookmarks();
-  }, [sessionToken, userOnly, currentSort]);
+  }, [sessionToken, userOnly, currentSort, currentFilter, address, bookmarkNFT]);
   
   // Update currentSort if sortBy prop changes
   useEffect(() => {
-    if (sortBy === 'delegations' || sortBy === 'created_at') {
+    if (sortBy === 'delegations' || sortBy === 'created_at' || sortBy === 'token_id') {
       setCurrentSort(sortBy);
     }
   }, [sortBy]);
   
-  const handleSortChange = (newSortBy: 'created_at' | 'delegations') => {
+  // Update currentFilter if filterNFTs prop changes
+  useEffect(() => {
+    setCurrentFilter(filterNFTs);
+  }, [filterNFTs]);
+  
+  const handleSortChange = (newSortBy: 'created_at' | 'delegations' | 'token_id') => {
     setCurrentSort(newSortBy);
+  };
+  
+  const handleFilterChange = (newFilter: 'all' | 'owned' | 'not-owned') => {
+    setCurrentFilter(newFilter);
   };
   
   if (isLoading) {
     return (
-      <div style={{ textAlign: 'center', padding: '40px' }}>
-        <div style={{
-          width: '40px',
-          height: '40px',
-          margin: '0 auto',
-          border: '4px solid rgba(0, 0, 0, 0.1)',
-          borderTop: '4px solid #007bff',
-          borderRadius: '50%',
-          animation: 'spin 1s linear infinite'
-        }} />
-        <style>{`
-          @keyframes spin {
-            0% { transform: rotate(0deg); }
-            100% { transform: rotate(360deg); }
-          }
-        `}</style>
-        <p style={{ marginTop: '20px' }}>Loading bookmarks...</p>
+      <div className="loading-container">
+        <div className="loading-spinner" />
+        <p>Loading bookmarks...</p>
       </div>
     );
   }
   
   if (error) {
     return (
-      <div style={{ 
-        textAlign: 'center', 
-        padding: '40px',
-        backgroundColor: '#f8d7da',
-        color: '#721c24',
-        borderRadius: '8px',
-        maxWidth: '800px',
-        margin: '0 auto'
-      }}>
-        <p style={{ marginBottom: '15px' }}><strong>Error:</strong> {error}</p>
+      <div className="error-container">
+        <p><strong>Error:</strong> {error}</p>
         <button
           onClick={fetchBookmarks}
-          style={{
-            padding: '8px 16px',
-            backgroundColor: '#6c757d',
-            color: 'white',
-            border: 'none',
-            borderRadius: '4px',
-            cursor: 'pointer'
-          }}
+          className="retry-button"
         >
           Try Again
         </button>
@@ -143,18 +180,13 @@ export const BookmarkList = ({
   
   if (bookmarks.length === 0) {
     return (
-      <div style={{ 
-        textAlign: 'center', 
-        padding: '40px',
-        backgroundColor: '#e9ecef',
-        borderRadius: '8px',
-        maxWidth: '800px',
-        margin: '0 auto'
-      }}>
-        <p style={{ marginBottom: '15px' }}>
+      <div className="empty-state">
+        <p>
           {userOnly 
             ? "You haven't added any bookmarks yet." 
-            : "No bookmarks found."}
+            : currentFilter === 'owned'
+              ? "You don't own any bookmark NFTs yet."
+              : "No bookmarks found."}
         </p>
         <p>Be the first to add a bookmark!</p>
       </div>
@@ -162,170 +194,121 @@ export const BookmarkList = ({
   }
   
   return (
-    <div className="bookmark-list" style={{ maxWidth: '1000px', margin: '0 auto' }}>
-      <div style={{ 
-        display: 'flex', 
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        marginBottom: '20px'
-      }}>
-        <h2 style={{ margin: 0 }}>
+    <div className="bookmark-list">
+      <div className="bookmark-list-header">
+        <h2>
           {userOnly ? 'Your Bookmarks' : 'All Bookmarks'}
         </h2>
         
-        <div style={{ display: 'flex', gap: '10px' }}>
-          <button
-            onClick={() => handleSortChange('created_at')}
-            style={{
-              padding: '8px 16px',
-              backgroundColor: currentSort === 'created_at' ? '#007bff' : '#e9ecef',
-              color: currentSort === 'created_at' ? 'white' : '#212529',
-              border: 'none',
-              borderRadius: '4px',
-              cursor: 'pointer'
-            }}
-          >
-            Newest
-          </button>
-          <button
-            onClick={() => handleSortChange('delegations')}
-            style={{
-              padding: '8px 16px',
-              backgroundColor: currentSort === 'delegations' ? '#007bff' : '#e9ecef',
-              color: currentSort === 'delegations' ? 'white' : '#212529',
-              border: 'none',
-              borderRadius: '4px',
-              cursor: 'pointer'
-            }}
-          >
-            Most Popular
-          </button>
+        <div className="filter-controls">
+          {/* NFT Filter Controls */}
+          <div className="filter-group">
+            <span className="filter-label">Show:</span>
+            <div className="button-group">
+              <button
+                onClick={() => handleFilterChange('all')}
+                className={`filter-button ${currentFilter === 'all' ? 'active' : ''}`}
+              >
+                All
+              </button>
+              <button
+                onClick={() => handleFilterChange('owned')}
+                className={`filter-button ${currentFilter === 'owned' ? 'active' : ''}`}
+              >
+                Owned NFTs
+              </button>
+              <button
+                onClick={() => handleFilterChange('not-owned')}
+                className={`filter-button ${currentFilter === 'not-owned' ? 'active' : ''}`}
+              >
+                Not Owned
+              </button>
+            </div>
+          </div>
+          
+          {/* Sort Controls */}
+          <div className="filter-group">
+            <span className="filter-label">Sort by:</span>
+            <div className="button-group">
+              <button
+                onClick={() => handleSortChange('created_at')}
+                className={`filter-button ${currentSort === 'created_at' ? 'active' : ''}`}
+              >
+                Newest
+              </button>
+              <button
+                onClick={() => handleSortChange('delegations')}
+                className={`filter-button ${currentSort === 'delegations' ? 'active' : ''}`}
+              >
+                Most Popular
+              </button>
+              <button
+                onClick={() => handleSortChange('token_id')}
+                className={`filter-button ${currentSort === 'token_id' ? 'active' : ''}`}
+              >
+                Token ID
+              </button>
+            </div>
+          </div>
         </div>
       </div>
       
-      <div style={{ 
-        display: 'grid', 
-        gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))',
-        gap: '20px'
-      }}>
+      <div className="bookmark-grid">
         {bookmarks.map(bookmark => (
           <Link 
             key={bookmark.id}
             to={`/bookmark/${bookmark.id}`}
-            style={{ textDecoration: 'none', color: 'inherit' }}
+            className="bookmark-card"
           >
-            <div 
-              style={{
-                border: '1px solid #dee2e6',
-                borderRadius: '8px',
-                overflow: 'hidden',
-                backgroundColor: 'white',
-                boxShadow: '0 2px 4px rgba(0,0,0,0.05)',
-                transition: 'transform 0.2s ease-in-out, box-shadow 0.2s ease-in-out',
-                cursor: 'pointer',
-                height: '100%'
-              }}
-              onMouseOver={(e) => {
-                e.currentTarget.style.transform = 'translateY(-5px)';
-                e.currentTarget.style.boxShadow = '0 5px 15px rgba(0,0,0,0.1)';
-              }}
-              onMouseOut={(e) => {
-                e.currentTarget.style.transform = 'translateY(0)';
-                e.currentTarget.style.boxShadow = '0 2px 4px rgba(0,0,0,0.05)';
-              }}
-            >
+            {/* NFT Badge - only show if it has a token_id */}
+            {bookmark.token_id && (
+              <div className="nft-badge">
+                NFT #{bookmark.token_id}
+              </div>
+            )}
+            
+            {/* Ownership Badge - only show if user owns this NFT */}
+            {bookmark.token_id && bookmark.owner_address?.toLowerCase() === address?.toLowerCase() && (
+              <div className="ownership-badge">
+                You Own This
+              </div>
+            )}
+            
+            <div className="bookmark-cover">
               {bookmark.cover_url ? (
-                <div style={{ 
-                  height: '180px', 
-                  overflow: 'hidden',
-                  backgroundColor: '#f8f9fa',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center'
-                }}>
-                  <img 
-                    src={bookmark.cover_url} 
-                    alt={`Cover for ${bookmark.title}`}
-                    style={{ 
-                      width: '100%', 
-                      height: '100%', 
-                      objectFit: 'cover'
-                    }}
-                    onError={(e) => {
-                      // Replace with placeholder on error
-                      (e.target as HTMLImageElement).src = 'https://via.placeholder.com/300x180?text=No+Cover';
-                    }}
-                  />
-                </div>
+                <img 
+                  src={bookmark.cover_url} 
+                  alt={`Cover for ${bookmark.title}`}
+                  className="cover-image"
+                  onError={(e) => {
+                    // Replace with placeholder on error
+                    (e.target as HTMLImageElement).src = 'https://via.placeholder.com/300x180?text=No+Cover';
+                  }}
+                />
               ) : (
-                <div style={{ 
-                  height: '180px', 
-                  backgroundColor: '#f8f9fa',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  color: '#6c757d'
-                }}>
+                <div className="cover-placeholder">
                   No Cover Available
                 </div>
               )}
+            </div>
+            
+            <div className="bookmark-details">
+              <h3 className="bookmark-title">{bookmark.title}</h3>
+              <p className="bookmark-author">by {bookmark.author}</p>
               
-              <div style={{ padding: '15px' }}>
-                <h3 style={{ 
-                  margin: '0 0 8px 0',
-                  fontSize: '18px',
-                  fontWeight: 'bold',
-                  color: '#212529'
-                }}>
-                  {bookmark.title}
-                </h3>
+              {bookmark.description && (
+                <p className="bookmark-description">{bookmark.description}</p>
+              )}
+              
+              <div className="bookmark-meta">
+                <span className="bookmark-date">
+                  Added: {new Date(bookmark.created_at).toLocaleDateString()}
+                </span>
                 
-                <p style={{ 
-                  margin: '0 0 12px 0',
-                  fontSize: '14px',
-                  color: '#6c757d'
-                }}>
-                  by {bookmark.author}
-                </p>
-                
-                {bookmark.description && (
-                  <p style={{ 
-                    margin: '0 0 15px 0',
-                    fontSize: '14px',
-                    color: '#212529',
-                    display: '-webkit-box',
-                    WebkitLineClamp: 3,
-                    WebkitBoxOrient: 'vertical',
-                    overflow: 'hidden',
-                    textOverflow: 'ellipsis'
-                  }}>
-                    {bookmark.description}
-                  </p>
-                )}
-                
-                <div style={{ 
-                  display: 'flex', 
-                  justifyContent: 'space-between',
-                  alignItems: 'center',
-                  marginTop: '15px',
-                  fontSize: '14px',
-                  color: '#6c757d'
-                }}>
-                  <span>
-                    Added: {new Date(bookmark.created_at).toLocaleDateString()}
-                  </span>
-                  
-                  <span style={{ 
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '5px',
-                    fontWeight: 'bold',
-                    color: bookmark.total_delegations ? '#28a745' : '#6c757d'
-                  }}>
-                    <span>🔖</span>
-                    <span>{bookmark.total_delegations || 0}</span>
-                  </span>
-                </div>
+                <span className="bookmark-delegations">
+                  <span className="delegation-icon">🔖</span>
+                  <span className="delegation-count">{bookmark.total_delegations || 0}</span>
+                </span>
               </div>
             </div>
           </Link>
