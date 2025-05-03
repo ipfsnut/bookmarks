@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useAccount } from 'wagmi';
-import { useStakedBalance } from '../services/blockchain';
+import { contractService } from '../services/contract.service';
 
 interface StakedBalanceProps {
   address?: string;
@@ -13,7 +13,6 @@ export const StakedBalance: React.FC<StakedBalanceProps> = ({
 }) => {
   const { address: connectedAddress } = useAccount();
   const userAddress = address || connectedAddress;
-  const { fetchBalance } = useStakedBalance(userAddress);
   const [balance, setBalance] = useState<string>('0');
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
@@ -51,7 +50,7 @@ export const StakedBalance: React.FC<StakedBalanceProps> = ({
       
       try {
         console.log(`Fetching balance for ${userAddress}, attempt ${retryCount + 1}/${MAX_RETRIES}`);
-        const balanceValue = await fetchBalance();
+        const balanceValue = await contractService.getStakedBalance(userAddress);
         
         // Only update state if component is still mounted
         if (isMounted.current) {
@@ -80,7 +79,7 @@ export const StakedBalance: React.FC<StakedBalanceProps> = ({
     };
 
     getBalance();
-  }, [userAddress, fetchBalance, refreshTrigger, retryCount]);
+  }, [userAddress, refreshTrigger, retryCount]);
 
   const handleRetry = () => {
     setRetryCount(0); // Reset retry count to trigger a new fetch attempt

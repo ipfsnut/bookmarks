@@ -1,13 +1,6 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useAccount } from 'wagmi';
-import { ethers } from 'ethers';
-import { 
-  useCardCatalog, 
-  useNSIToken,
-  formatBigInt,
-  cachedContractCall,
-  clearContractCallCache
-} from '../utils/contracts';
+import { useBalances } from '../services/contract.service';
 import TokenActions from '../components/TokenActions';
 import UnbondingRequests from '../components/UnbondingRequests';
 
@@ -35,164 +28,43 @@ const formatBalanceDisplay = (value: string): string => {
 
 const TokenManagementPage: React.FC = () => {
   const { address } = useAccount();
-  const cardCatalog = useCardCatalog();
-  const nsiToken = useNSIToken();
-  
-  // Balance states with empty initial values
-  const [nsiBalance, setNsiBalance] = useState<string>('Loading...');
-  const [wNsiBalance, setWNsiBalance] = useState<string>('Loading...');
-  const [votingPower, setVotingPower] = useState<string>('Loading...');
+  const { 
+    nsiBalance, 
+    wNsiBalance, 
+    votingPower, 
+    isLoading, 
+    error, 
+    fetchBalances,
+    lastUpdated 
+  } = useBalances(address);
   
   // Individual loading states for more granular UI feedback
-  const [isNsiLoading, setIsNsiLoading] = useState<boolean>(true);
-  const [isWNsiLoading, setIsWNsiLoading] = useState<boolean>(true);
-  const [isVotingPowerLoading, setIsVotingPowerLoading] = useState<boolean>(true);
-  
-  // Overall loading state
-  const [isLoading, setIsLoading] = useState<boolean>(true);
-  const [error, setError] = useState<string | null>(null);
-  
-  // Last successful fetch timestamp
-  const [lastUpdated, setLastUpdated] = useState<number>(0);
+  const [isNsiLoading, setIsNsiLoading] = useState<boolean>(isLoading);
+  const [isWNsiLoading, setIsWNsiLoading] = useState<boolean>(isLoading);
+  const [isVotingPowerLoading, setIsVotingPowerLoading] = useState<boolean>(isLoading);
   
   // Force re-render key
   const [refreshKey, setRefreshKey] = useState<number>(0);
   
-  // Use a ref to track if the component is mounted
-  const isMounted = useRef(true);
-  
-  // Use a ref to prevent multiple simultaneous data loads
-  const isLoadingRef = useRef(false);
-  
-  // Set up cleanup on unmount
+  // Update individual loading states when main loading state changes
   useEffect(() => {
-    return () => {
-      isMounted.current = false;
-    };
-  }, []);
+    setIsNsiLoading(isLoading);
+    setIsWNsiLoading(isLoading);
+    setIsVotingPowerLoading(isLoading);
+  }, [isLoading]);
   
-  // Load balances when dependencies change
-  useEffect(() => {
-    const loadBalances = async () => {
-      // Skip if already loading or no wallet connected
-      if (isLoadingRef.current) return;
-      
-      if (!address) {
-        setNsiBalance('Connect wallet');
-        setWNsiBalance('Connect wallet');
-        setVotingPower('Connect wallet');
-        setIsLoading(false);
-        setIsNsiLoading(false);
-        setIsWNsiLoading(false);
-        setIsVotingPowerLoading(false);
-        return;
-      }
-      
-      if (!nsiToken || !cardCatalog) {
-        setNsiBalance('Initializing...');
-        setWNsiBalance('Initializing...');
-        setVotingPower('Initializing...');
-        return;
-      }
-      
-      // Prevent multiple simultaneous loads
-      isLoadingRef.current = true;
-      
-      // Set overall loading state but keep showing previous values
-      setIsLoading(true);
-      setError(null);
-      
-      try {
-        console.log('Loading balances for address:', address);
-        
-        // Load NSI balance
-        try {
-          setIsNsiLoading(true);
-          const nsiBalanceRaw = await cachedContractCall(nsiToken, 'balanceOf', [address], BigInt(0));
-          console.log('NSI balance raw:', nsiBalanceRaw.toString());
-          
-          // Update state immediately
-          setNsiBalance(formatBigInt(nsiBalanceRaw));
-          setIsNsiLoading(false);
-        } catch (err) {
-          console.error('Error loading NSI balance:', err);
-          setIsNsiLoading(false);
-        }
-        
-        // Load wNSI balance
-        try {
-          setIsWNsiLoading(true);
-          const wNsiBalanceRaw = await cachedContractCall(cardCatalog, 'balanceOf', [address], BigInt(0));
-          console.log('wNSI balance raw:', wNsiBalanceRaw.toString());
-          
-          // Update state immediately
-          setWNsiBalance(formatBigInt(wNsiBalanceRaw));
-          setIsWNsiLoading(false);
-        } catch (err) {
-          console.error('Error loading wNSI balance:', err);
-          setIsWNsiLoading(false);
-        }
-        
-        // Load voting power
-        try {
-          setIsVotingPowerLoading(true);
-          const votingPowerRaw = await cachedContractCall(cardCatalog, 'getAvailableVotingPower', [address], BigInt(0));
-          console.log('Voting power raw:', votingPowerRaw.toString());
-          
-          // Update state immediately
-          setVotingPower(formatBigInt(votingPowerRaw));
-          setIsVotingPowerLoading(false);
-        } catch (err) {
-          console.error('Error loading voting power:', err);
-          setIsVotingPowerLoading(false);
-        }
-        
-        // Update last successful fetch timestamp
-        setLastUpdated(Date.now());
-        
-        // Log formatted balances
-        console.log('Formatted balances:', {
-          nsi: formatBigInt(await cachedContractCall(nsiToken, 'balanceOf', [address], BigInt(0))),
-          wNsi: formatBigInt(await cachedContractCall(cardCatalog, 'balanceOf', [address], BigInt(0))),
-          votingPower: formatBigInt(await cachedContractCall(cardCatalog, 'getAvailableVotingPower', [address], BigInt(0)))
-        });
-        
-        // Force a re-render
-        setRefreshKey(prev => prev + 1);
-      } catch (err) {
-        console.error('Error loading balances:', err);
-        setError('Failed to load some balances. Please try again.');
-      } finally {
-        setIsLoading(false);
-        isLoadingRef.current = false;
-      }
-    };
-    
-    loadBalances();
-    
-    // Set up a refresh interval (every 5 minutes instead of 2 minutes)
-    const intervalId = setInterval(loadBalances, 300000); // 5 minutes
-    
-    // Clean up function
-    return () => {
-      clearInterval(intervalId);
-    };
-  }, [address, cardCatalog, nsiToken]);
-  
-  // Function to selectively clear cache and refresh balances
+  // Function to refresh balances
   const refreshBalances = () => {
-    // Clear only relevant cache entries instead of all cache
-    clearContractCallCache('balanceOf');
-    clearContractCallCache('getAvailableVotingPower');
-    
     // Reset loading states
     setIsNsiLoading(true);
     setIsWNsiLoading(true);
     setIsVotingPowerLoading(true);
-    setIsLoading(true);
     
-    // Force a new load by setting isLoadingRef to false
-    isLoadingRef.current = false;
+    // Fetch balances
+    fetchBalances();
+    
+    // Force a re-render
+    setRefreshKey(prev => prev + 1);
   };
   
   // Format the last updated time
@@ -310,7 +182,7 @@ const TokenManagementPage: React.FC = () => {
             overflow: 'hidden',
             textOverflow: 'ellipsis'
           }}>
-            {isNsiLoading && nsiBalance === 'Loading...' ? 'Loading...' : formatBalanceDisplay(nsiBalance)}
+            {isNsiLoading ? 'Loading...' : formatBalanceDisplay(nsiBalance)}
           </div>
         </div>
         
@@ -343,7 +215,7 @@ const TokenManagementPage: React.FC = () => {
             overflow: 'hidden',
             textOverflow: 'ellipsis'
           }}>
-            {isWNsiLoading && wNsiBalance === 'Loading...' ? 'Loading...' : formatBalanceDisplay(wNsiBalance)}
+            {isWNsiLoading ? 'Loading...' : formatBalanceDisplay(wNsiBalance)}
           </div>
         </div>
         
@@ -376,7 +248,7 @@ const TokenManagementPage: React.FC = () => {
             overflow: 'hidden',
             textOverflow: 'ellipsis'
           }}>
-            {isVotingPowerLoading && votingPower === 'Loading...' ? 'Loading...' : formatBalanceDisplay(votingPower)}
+            {isVotingPowerLoading ? 'Loading...' : formatBalanceDisplay(votingPower)}
           </div>
         </div>
       </div>
