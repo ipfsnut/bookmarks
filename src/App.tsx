@@ -11,7 +11,6 @@ import { useWallet } from "./contexts/WalletContext";
 import BookmarkDetailPage from "./pages/BookmarkDetail";
 import TokenManagementPage from "./pages/TokenManagement";
 import LeaderboardPage from "./pages/LeaderboardPage";
-import { BalanceProvider } from "./contexts/BalanceContext";
 
 // Simple Home component
 function Home() {
@@ -112,7 +111,6 @@ function App() {
   }, []);
 
   return (
-    <BalanceProvider>
       <Routes>
         <Route path="/" element={<Home />} />
         
@@ -168,7 +166,6 @@ function App() {
         
         <Route path="*" element={<Navigate to="/" />} />
       </Routes>
-    </BalanceProvider>
   );
 }
 

@@ -311,7 +311,7 @@ const BookmarkDetail: React.FC = () => {
               {/* Voting Section - Only show if this is a verified NFT */}
               {isNFT && nftVerified && tokenId && (
                 <div className="p-4 border-t">
-                  <BookmarkVote tokenId={tokenId} />
+                  <BookmarkVote bookmarkId={tokenId} />
                 </div>
               )}
               

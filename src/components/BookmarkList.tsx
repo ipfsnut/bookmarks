@@ -58,22 +58,110 @@ export const BookmarkList = ({
     }
   };
   
-  const fetchBookmarks = async () => {
-    if (!sessionToken) {
-      setIsLoading(false);
-      setError('You must be logged in to view bookmarks');
-      return;
-    }
+  // Add a function to fetch bookmarks from the blockchain
+  const fetchBookmarksFromBlockchain = async () => {
+    if (!bookmarkNFT) return [];
     
+    try {
+      // Get total supply of NFTs
+      const totalSupply = await bookmarkNFT.totalSupply();
+      console.log('Total NFTs:', totalSupply.toString());
+      
+      // Fetch the latest NFTs (limit to a reasonable number)
+      const count = Math.min(Number(totalSupply), 50);
+      const bookmarks = [];
+      
+      for (let i = totalSupply; i > totalSupply - count && i > 0; i--) {
+        try {
+          // Check if token exists
+          const exists = await bookmarkNFT.exists(i);
+          if (!exists) continue;
+          
+          // Get basic metadata
+          const metadata = await bookmarkNFT.getBookmarkMetadata(i);
+          const owner = await bookmarkNFT.ownerOf(i);
+          const creationTime = await bookmarkNFT.getBookmarkCreationTime(i);
+          
+          // Create bookmark object
+          const bookmark = {
+            id: i.toString(),
+            title: metadata.title,
+            author: metadata.creator,
+            tokenId: i.toString(),
+            metadata_uri: metadata.metadataURI,
+            owner_address: owner,
+            created_at: new Date(Number(creationTime) * 1000).toISOString(),
+            // Other fields will be populated from IPFS if needed
+          };
+          
+          bookmarks.push(bookmark);
+        } catch (err) {
+          console.error(`Error fetching NFT ${i}:`, err);
+        }
+      }
+      
+      return bookmarks;
+    } catch (err) {
+      console.error('Error fetching bookmarks from blockchain:', err);
+      return [];
+    }
+  };
+
+  // Update the fetchBookmarks function
+  const fetchBookmarks = async () => {
     setIsLoading(true);
     setError(null);
     
     try {
+      // First try to fetch from blockchain
+      const blockchainBookmarks = await fetchBookmarksFromBlockchain();
+      
+      // If we got bookmarks from the blockchain, use those
+      if (blockchainBookmarks.length > 0) {
+        console.log('Using blockchain bookmarks:', blockchainBookmarks.length);
+        
+        // Apply filtering
+        let filteredBookmarks = blockchainBookmarks;
+        
+        if (userOnly && address) {
+          filteredBookmarks = blockchainBookmarks.filter(
+            bookmark => bookmark.owner_address?.toLowerCase() === address.toLowerCase()
+          );
+        }
+        
+        if (currentFilter === 'owned' && address) {
+          filteredBookmarks = blockchainBookmarks.filter(
+            bookmark => bookmark.owner_address?.toLowerCase() === address.toLowerCase()
+          );
+        } else if (currentFilter === 'not-owned' && address) {
+          filteredBookmarks = blockchainBookmarks.filter(
+            bookmark => bookmark.owner_address?.toLowerCase() !== address.toLowerCase()
+          );
+        }
+        
+        // Apply sorting
+        if (currentSort === 'token_id') {
+          filteredBookmarks.sort((a, b) => 
+            Number(b.tokenId || 0) - Number(a.tokenId || 0)
+          );
+        }
+        // Other sorting options would need to be implemented differently
+        // since we don't have delegation data from the blockchain yet
+        
+        setBookmarks(filteredBookmarks);
+        setIsLoading(false);
+        return;
+      }
+      
+      // Fallback to database if blockchain fetch failed or returned no results
+      console.log('Falling back to database bookmarks');
+      
+      // Original database fetch logic
       const queryParams = new URLSearchParams();
       if (userOnly) queryParams.append('userOnly', 'true');
       queryParams.append('sortBy', currentSort);
       queryParams.append('limit', limit.toString());
-      queryParams.append('includeNFTData', 'true'); // Request NFT data
+      queryParams.append('includeNFTData', 'true');
       
       const response = await fetch(`${API_ENDPOINTS.BOOKMARKS}?${queryParams.toString()}`, {
         method: 'GET',
@@ -90,39 +178,7 @@ export const BookmarkList = ({
       }
       
       const data = await response.json();
-      let fetchedBookmarks = data.bookmarks || [];
-      
-      // If we have a connected wallet and bookmarkNFT contract, enhance with ownership data
-      if (bookmarkNFT && address) {
-        // For each bookmark with a token_id, check ownership
-        const enhancedBookmarks = await Promise.all(
-          fetchedBookmarks.map(async (bookmark: Bookmark) => {
-            if (bookmark.token_id) {
-              const isOwner = await checkNFTOwnership(bookmark.token_id);
-              return {
-                ...bookmark,
-                owner_address: isOwner ? address : bookmark.owner_address
-              };
-            }
-            return bookmark;
-          })
-        );
-        
-        fetchedBookmarks = enhancedBookmarks;
-      }
-      
-      // Apply NFT filtering if needed
-      if (currentFilter !== 'all' && address) {
-        fetchedBookmarks = fetchedBookmarks.filter((bookmark: Bookmark) => {
-          // Only include bookmarks with token_id (they are NFTs)
-          if (!bookmark.token_id) return false;
-          
-          const isOwned = bookmark.owner_address?.toLowerCase() === address.toLowerCase();
-          return currentFilter === 'owned' ? isOwned : !isOwned;
-        });
-      }
-      
-      setBookmarks(fetchedBookmarks);
+      setBookmarks(data.bookmarks || []);
     } catch (err) {
       console.error('Error fetching bookmarks:', err);
       setError(err instanceof Error ? err.message : 'Failed to fetch bookmarks');

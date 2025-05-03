@@ -3,9 +3,10 @@ import {
   Contract, 
   formatUnits, 
   parseUnits,
-  BigNumberish
+  BigNumberish,
+  ethers
 } from 'ethers';
-import { useEffect, useState, useRef } from 'react';
+import { useEffect, useState, useRef, useCallback } from 'react';
 import { CONTRACT_ADDRESSES } from '../config/constants';
 
 // Import the ABIs
@@ -65,13 +66,14 @@ function useContract(address: string, abi: any[]): Contract | null {
 
 // Helper function to cache contract call results
 async function cachedContractCall<T>(
-  contract: Contract | null,  // Use Contract instead of ethers.Contract
+  contract: ethers.Contract | null,
   method: string,
-  args: any[] = []
+  args: any[] = [],
+  fallbackValue?: T
 ): Promise<T> {
   if (!contract) {
     console.warn(`Contract is null when calling ${method}`);
-    return null as unknown as T;
+    return (fallbackValue !== undefined ? fallbackValue : null) as unknown as T;
   }
   
   const cacheKey = `${contract.target}_${method}_${JSON.stringify(args)}`;
@@ -83,21 +85,52 @@ async function cachedContractCall<T>(
     return cachedResult.value;
   }
   
-  try {
-    console.log(`Calling contract method ${method}`);
-    const result = await contract[method](...args);
-    
-    // Cache the result
-    resultCache.set(cacheKey, {
-      value: result,
-      timestamp: Date.now()
-    });
-    
-    return result;
-  } catch (error) {
-    console.error(`Error calling ${method}:`, error);
-    throw error;
+  // Add retry logic
+  const MAX_RETRIES = 3;
+  let retryCount = 0;
+  let lastError: any = null;
+  
+  while (retryCount < MAX_RETRIES) {
+    try {
+      console.log(`Calling contract method ${method} (attempt ${retryCount + 1}/${MAX_RETRIES})`);
+      const result = await contract[method](...args);
+      
+      // Cache the result
+      resultCache.set(cacheKey, {
+        value: result,
+        timestamp: Date.now()
+      });
+      
+      return result;
+    } catch (error) {
+      lastError = error;
+      console.error(`Error calling ${method} (attempt ${retryCount + 1}/${MAX_RETRIES}):`, error);
+      retryCount++;
+      
+      if (retryCount < MAX_RETRIES) {
+        // Exponential backoff
+        const delay = Math.pow(2, retryCount) * 1000;
+        console.log(`Retrying in ${delay}ms...`);
+        await new Promise(resolve => setTimeout(resolve, delay));
+      }
+    }
   }
+  
+  console.warn(`All ${MAX_RETRIES} attempts to call ${method} failed`);
+  
+  // If we have a cached result, return it even if it's expired
+  if (cachedResult) {
+    console.log(`Using expired cached result for ${method} as fallback`);
+    return cachedResult.value;
+  }
+  
+  // If fallback value is provided, return it
+  if (fallbackValue !== undefined) {
+    return fallbackValue as T;
+  }
+  
+  // Re-throw the last error if no fallback is available
+  throw lastError;
 }
 
 // Hook to use the NSI Token contract (ERC20)
@@ -210,3 +243,107 @@ export function clearContractCallCache(methodPattern?: string): void {
 
 // Export the cachedContractCall function
 export { cachedContractCall };
+
+/**
+ * Helper function to safely call a contract method with retry logic
+ * @param contract The contract instance
+ * @param method The method name to call
+ * @param args Arguments to pass to the method
+ * @param fallbackValue Value to return if all retries fail
+ * @returns The result of the contract call or fallback value
+ */
+export async function safeContractCall<T>(
+  contract: ethers.Contract | null,
+  method: string,
+  args: any[] = [],
+  fallbackValue: T
+): Promise<T> {
+  if (!contract) {
+    console.warn(`Contract is null when calling ${method}`);
+    return fallbackValue;
+  }
+
+  const MAX_RETRIES = 3;
+  let retryCount = 0;
+  let lastError: any = null;
+
+  while (retryCount < MAX_RETRIES) {
+    try {
+      // Add a small random delay to prevent rate limiting
+      if (retryCount > 0) {
+        const delay = Math.pow(2, retryCount) * 1000 + Math.random() * 1000;
+        await new Promise(resolve => setTimeout(resolve, delay));
+      }
+
+      console.log(`Calling ${method} (attempt ${retryCount + 1}/${MAX_RETRIES})`);
+      const result = await contract[method](...args);
+      return result as T;
+    } catch (err) {
+      lastError = err;
+      console.error(`Error calling ${method} (attempt ${retryCount + 1}/${MAX_RETRIES}):`, err);
+      retryCount++;
+    }
+  }
+
+  console.warn(`All ${MAX_RETRIES} attempts to call ${method} failed, using fallback value`);
+  return fallbackValue;
+}
+
+/**
+ * Hook to safely get balances from CardCatalog with better error handling
+ */
+export function useSafeCardCatalogBalances() {
+  const cardCatalog = useCardCatalog();
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [balances, setBalances] = useState({
+    wNsiBalance: '0',
+    votingPower: '0'
+  });
+
+  const fetchBalances = useCallback(async (address: string) => {
+    if (!cardCatalog || !address) {
+      return { wNsiBalance: '0', votingPower: '0' };
+    }
+
+    setIsLoading(true);
+    setError(null);
+
+    try {
+      // Use the safe contract call for balanceOf
+      const wNsiBalanceRaw = await safeContractCall(
+        cardCatalog,
+        'balanceOf',
+        [address],
+        BigInt(0)
+      );
+
+      // Use the safe contract call for getAvailableVotingPower
+      const votingPowerRaw = await safeContractCall(
+        cardCatalog,
+        'getAvailableVotingPower',
+        [address],
+        BigInt(0)
+      );
+
+      const wNsiBalance = formatBigInt(wNsiBalanceRaw);
+      const votingPower = formatBigInt(votingPowerRaw);
+
+      setBalances({ wNsiBalance, votingPower });
+      return { wNsiBalance, votingPower };
+    } catch (err) {
+      console.error('Error fetching balances:', err);
+      setError('Failed to load balances. Please try again.');
+      return { wNsiBalance: '0', votingPower: '0' };
+    } finally {
+      setIsLoading(false);
+    }
+  }, [cardCatalog]);
+
+  return {
+    ...balances,
+    isLoading,
+    error,
+    fetchBalances
+  };
+}

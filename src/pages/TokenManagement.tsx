@@ -1,26 +1,36 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useAccount } from 'wagmi';
 import { ethers } from 'ethers';
 import { 
   useCardCatalog, 
-  useNSIToken
+  useNSIToken,
+  formatBigInt,
+  cachedContractCall,
+  clearContractCallCache
 } from '../utils/contracts';
 import TokenActions from '../components/TokenActions';
 import UnbondingRequests from '../components/UnbondingRequests';
 
-// Helper function to format token amounts nicely
-const formatTokenAmount = (amount: string): string => {
-  // Convert to a number first to handle scientific notation
-  const num = parseFloat(amount);
-  
-  // If it's a whole number, don't show decimal places
-  if (Number.isInteger(num)) {
-    return num.toString();
+const formatBalanceDisplay = (value: string): string => {
+  if (value === 'Loading...' || value === 'Connect wallet' || value === 'Initializing...') {
+    return value;
   }
   
-  // For numbers with decimals, limit to 4 decimal places
-  // and remove trailing zeros
-  return num.toFixed(4).replace(/\.?0+$/, '');
+  try {
+    // Parse the string to a number
+    const num = parseFloat(value);
+    
+    // Check if it's a whole number
+    if (Number.isInteger(num)) {
+      return num.toString();
+    }
+    
+    // Round to 2 decimal places
+    return num.toFixed(2);
+  } catch (error) {
+    console.error('Error formatting balance display:', error);
+    return value;
+  }
 };
 
 const TokenManagementPage: React.FC = () => {
@@ -28,137 +38,213 @@ const TokenManagementPage: React.FC = () => {
   const cardCatalog = useCardCatalog();
   const nsiToken = useNSIToken();
   
+  // Balance states with empty initial values
   const [nsiBalance, setNsiBalance] = useState<string>('Loading...');
   const [wNsiBalance, setWNsiBalance] = useState<string>('Loading...');
   const [votingPower, setVotingPower] = useState<string>('Loading...');
+  
+  // Individual loading states for more granular UI feedback
+  const [isNsiLoading, setIsNsiLoading] = useState<boolean>(true);
+  const [isWNsiLoading, setIsWNsiLoading] = useState<boolean>(true);
+  const [isVotingPowerLoading, setIsVotingPowerLoading] = useState<boolean>(true);
+  
+  // Overall loading state
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
-  const [key, setKey] = useState<number>(0); // Force re-render key
+  
+  // Last successful fetch timestamp
+  const [lastUpdated, setLastUpdated] = useState<number>(0);
+  
+  // Force re-render key
+  const [refreshKey, setRefreshKey] = useState<number>(0);
+  
+  // Use a ref to track if the component is mounted
+  const isMounted = useRef(true);
+  
+  // Use a ref to prevent multiple simultaneous data loads
+  const isLoadingRef = useRef(false);
+  
+  // Set up cleanup on unmount
+  useEffect(() => {
+    return () => {
+      isMounted.current = false;
+    };
+  }, []);
   
   // Load balances when dependencies change
   useEffect(() => {
-    let isMounted = true;
-    
     const loadBalances = async () => {
+      // Skip if already loading or no wallet connected
+      if (isLoadingRef.current) return;
+      
       if (!address) {
-        if (isMounted) {
-          setNsiBalance('Connect wallet');
-          setWNsiBalance('Connect wallet');
-          setVotingPower('Connect wallet');
-          setIsLoading(false);
-        }
+        setNsiBalance('Connect wallet');
+        setWNsiBalance('Connect wallet');
+        setVotingPower('Connect wallet');
+        setIsLoading(false);
+        setIsNsiLoading(false);
+        setIsWNsiLoading(false);
+        setIsVotingPowerLoading(false);
         return;
       }
       
       if (!nsiToken || !cardCatalog) {
-        if (isMounted) {
-          setNsiBalance('Initializing...');
-          setWNsiBalance('Initializing...');
-          setVotingPower('Initializing...');
-        }
+        setNsiBalance('Initializing...');
+        setWNsiBalance('Initializing...');
+        setVotingPower('Initializing...');
         return;
       }
       
+      // Prevent multiple simultaneous loads
+      isLoadingRef.current = true;
+      
+      // Set overall loading state but keep showing previous values
+      setIsLoading(true);
+      setError(null);
+      
       try {
         console.log('Loading balances for address:', address);
-        setIsLoading(true);
         
-        // Fetch NSI balance
-        let nsiBalanceValue = '0';
+        // Load NSI balance
         try {
-          const nsiBalanceRaw = await nsiToken.balanceOf(address);
-          const nsiBalanceFormatted = ethers.formatUnits(nsiBalanceRaw, 18);
-          nsiBalanceValue = formatTokenAmount(nsiBalanceFormatted);
+          setIsNsiLoading(true);
+          const nsiBalanceRaw = await cachedContractCall(nsiToken, 'balanceOf', [address], BigInt(0));
           console.log('NSI balance raw:', nsiBalanceRaw.toString());
-          console.log('NSI balance formatted:', nsiBalanceValue);
+          
+          // Update state immediately
+          setNsiBalance(formatBigInt(nsiBalanceRaw));
+          setIsNsiLoading(false);
         } catch (err) {
-          console.error('Error fetching NSI balance:', err);
+          console.error('Error loading NSI balance:', err);
+          setIsNsiLoading(false);
         }
         
-        // Fetch wNSI balance
-        let wNsiBalanceValue = '0';
+        // Load wNSI balance
         try {
-          const wNsiBalanceRaw = await cardCatalog.balanceOf(address);
-          const wNsiBalanceFormatted = ethers.formatUnits(wNsiBalanceRaw, 18);
-          wNsiBalanceValue = formatTokenAmount(wNsiBalanceFormatted);
+          setIsWNsiLoading(true);
+          const wNsiBalanceRaw = await cachedContractCall(cardCatalog, 'balanceOf', [address], BigInt(0));
           console.log('wNSI balance raw:', wNsiBalanceRaw.toString());
-          console.log('wNSI balance formatted:', wNsiBalanceValue);
+          
+          // Update state immediately
+          setWNsiBalance(formatBigInt(wNsiBalanceRaw));
+          setIsWNsiLoading(false);
         } catch (err) {
-          console.error('Error fetching wNSI balance:', err);
+          console.error('Error loading wNSI balance:', err);
+          setIsWNsiLoading(false);
         }
         
-        // Fetch voting power
-        let votingPowerValue = '0';
+        // Load voting power
         try {
-          const votingPowerRaw = await cardCatalog.getAvailableVotingPower(address);
-          const votingPowerFormatted = ethers.formatUnits(votingPowerRaw, 18);
-          votingPowerValue = formatTokenAmount(votingPowerFormatted);
+          setIsVotingPowerLoading(true);
+          const votingPowerRaw = await cachedContractCall(cardCatalog, 'getAvailableVotingPower', [address], BigInt(0));
           console.log('Voting power raw:', votingPowerRaw.toString());
-          console.log('Voting power formatted:', votingPowerValue);
+          
+          // Update state immediately
+          setVotingPower(formatBigInt(votingPowerRaw));
+          setIsVotingPowerLoading(false);
         } catch (err) {
-          console.error('Error fetching voting power:', err);
+          console.error('Error loading voting power:', err);
+          setIsVotingPowerLoading(false);
         }
         
-        // Update state if component is still mounted
-        if (isMounted) {
-          // Update each state separately to ensure React detects the changes
-          setNsiBalance(nsiBalanceValue);
-          setWNsiBalance(wNsiBalanceValue);
-          setVotingPower(votingPowerValue);
-          setIsLoading(false);
-          setError(null);
-          
-          // Force a re-render by updating the key
-          setKey(prevKey => prevKey + 1);
-          
-          console.log('State updated with new balances');
-        }
+        // Update last successful fetch timestamp
+        setLastUpdated(Date.now());
+        
+        // Log formatted balances
+        console.log('Formatted balances:', {
+          nsi: formatBigInt(await cachedContractCall(nsiToken, 'balanceOf', [address], BigInt(0))),
+          wNsi: formatBigInt(await cachedContractCall(cardCatalog, 'balanceOf', [address], BigInt(0))),
+          votingPower: formatBigInt(await cachedContractCall(cardCatalog, 'getAvailableVotingPower', [address], BigInt(0)))
+        });
+        
+        // Force a re-render
+        setRefreshKey(prev => prev + 1);
       } catch (err) {
         console.error('Error loading balances:', err);
-        if (isMounted) {
-          setError('Failed to load balances. Please try again.');
-          setIsLoading(false);
-        }
+        setError('Failed to load some balances. Please try again.');
+      } finally {
+        setIsLoading(false);
+        isLoadingRef.current = false;
       }
     };
     
     loadBalances();
     
-    // Set up a refresh interval (every 30 seconds)
-    const intervalId = setInterval(loadBalances, 30000);
+    // Set up a refresh interval (every 5 minutes instead of 2 minutes)
+    const intervalId = setInterval(loadBalances, 300000); // 5 minutes
     
     // Clean up function
     return () => {
-      isMounted = false;
       clearInterval(intervalId);
     };
   }, [address, cardCatalog, nsiToken]);
   
-  // Function to manually refresh balances
+  // Function to selectively clear cache and refresh balances
   const refreshBalances = () => {
-    // Force a re-render by updating the key
-    setKey(prevKey => prevKey + 1);
+    // Clear only relevant cache entries instead of all cache
+    clearContractCallCache('balanceOf');
+    clearContractCallCache('getAvailableVotingPower');
+    
+    // Reset loading states
+    setIsNsiLoading(true);
+    setIsWNsiLoading(true);
+    setIsVotingPowerLoading(true);
+    setIsLoading(true);
+    
+    // Force a new load by setting isLoadingRef to false
+    isLoadingRef.current = false;
+  };
+  
+  // Format the last updated time
+  const getLastUpdatedText = () => {
+    if (!lastUpdated) return 'Never updated';
+    
+    const now = Date.now();
+    const diff = now - lastUpdated;
+    
+    if (diff < 60000) {
+      return 'Updated just now';
+    } else if (diff < 3600000) {
+      return `Updated ${Math.floor(diff / 60000)} minute(s) ago`;
+    } else {
+      return `Updated ${Math.floor(diff / 3600000)} hour(s) ago`;
+    }
   };
   
   return (
-    <div key={key} style={{ maxWidth: '800px', margin: '0 auto', padding: '20px' }}>
+    <div key={refreshKey} style={{ maxWidth: '800px', margin: '0 auto', padding: '20px' }}>
       <h1>Token Management</h1>
       
-      <button 
-        onClick={refreshBalances}
-        disabled={isLoading}
-        style={{ 
-          marginBottom: '20px',
-          padding: '8px 16px',
-          cursor: isLoading ? 'not-allowed' : 'pointer',
-          backgroundColor: '#007bff',
-          color: 'white',
-          border: 'none',
-          borderRadius: '4px'
-        }}
-      >
-        {isLoading ? 'Loading...' : 'Refresh Balances'}
-      </button>
+      <div style={{ 
+        display: 'flex', 
+        justifyContent: 'space-between', 
+        alignItems: 'center',
+        marginBottom: '20px'
+      }}>
+        <button 
+          onClick={refreshBalances}
+          disabled={isLoading}
+          style={{ 
+            padding: '8px 16px',
+            cursor: isLoading ? 'not-allowed' : 'pointer',
+            backgroundColor: '#007bff',
+            color: 'white',
+            border: 'none',
+            borderRadius: '4px',
+            opacity: isLoading ? 0.7 : 1
+          }}
+        >
+          {isLoading ? 'Loading...' : 'Refresh Balances'}
+        </button>
+        
+        <span style={{ 
+          fontSize: '14px', 
+          color: '#6c757d',
+          fontStyle: 'italic'
+        }}>
+          {getLastUpdatedText()}
+        </span>
+      </div>
       
       {error && (
         <div style={{ 
@@ -166,15 +252,32 @@ const TokenManagementPage: React.FC = () => {
           backgroundColor: '#f8d7da', 
           color: '#721c24', 
           borderRadius: '4px',
-          marginBottom: '20px'
+          marginBottom: '20px',
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center'
         }}>
-          {error}
+          <span>{error}</span>
+          <button 
+            onClick={refreshBalances}
+            style={{
+              padding: '4px 8px',
+              backgroundColor: '#dc3545',
+              color: 'white',
+              border: 'none',
+              borderRadius: '4px',
+              cursor: 'pointer',
+              fontSize: '14px'
+            }}
+          >
+            Try Again
+          </button>
         </div>
       )}
       
       <div style={{ 
         display: 'grid', 
-        gridTemplateColumns: 'repeat(3, 1fr)', 
+        gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', 
         gap: '20px', 
         marginBottom: '30px' 
       }}>
@@ -183,17 +286,31 @@ const TokenManagementPage: React.FC = () => {
           borderRadius: '8px', 
           backgroundColor: '#f0f0f0', 
           textAlign: 'center',
-          boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
+          boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
+          position: 'relative'
         }}>
+          {isNsiLoading && (
+            <div style={{
+              position: 'absolute',
+              top: '10px',
+              right: '10px',
+              width: '12px',
+              height: '12px',
+              borderRadius: '50%',
+              border: '2px solid #f3f3f3',
+              borderTop: '2px solid #3498db',
+              animation: 'spin 1s linear infinite'
+            }}></div>
+          )}
           <h3 style={{ marginTop: 0, marginBottom: '10px' }}>NSI Balance</h3>
-          <div id="nsi-balance" style={{ 
+          <div style={{ 
             fontSize: '24px', 
             fontWeight: 'bold',
             wordBreak: 'break-all',
             overflow: 'hidden',
             textOverflow: 'ellipsis'
           }}>
-            {nsiBalance}
+            {isNsiLoading && nsiBalance === 'Loading...' ? 'Loading...' : formatBalanceDisplay(nsiBalance)}
           </div>
         </div>
         
@@ -202,17 +319,31 @@ const TokenManagementPage: React.FC = () => {
           borderRadius: '8px', 
           backgroundColor: '#f0f0f0', 
           textAlign: 'center',
-          boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
+          boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
+          position: 'relative'
         }}>
+          {isWNsiLoading && (
+            <div style={{
+              position: 'absolute',
+              top: '10px',
+              right: '10px',
+              width: '12px',
+              height: '12px',
+              borderRadius: '50%',
+              border: '2px solid #f3f3f3',
+              borderTop: '2px solid #3498db',
+              animation: 'spin 1s linear infinite'
+            }}></div>
+          )}
           <h3 style={{ marginTop: 0, marginBottom: '10px' }}>wNSI Balance</h3>
-          <div id="wnsi-balance" style={{ 
+          <div style={{ 
             fontSize: '24px', 
             fontWeight: 'bold',
             wordBreak: 'break-all',
             overflow: 'hidden',
             textOverflow: 'ellipsis'
           }}>
-            {wNsiBalance}
+            {isWNsiLoading && wNsiBalance === 'Loading...' ? 'Loading...' : formatBalanceDisplay(wNsiBalance)}
           </div>
         </div>
         
@@ -221,20 +352,44 @@ const TokenManagementPage: React.FC = () => {
           borderRadius: '8px', 
           backgroundColor: '#f0f0f0', 
           textAlign: 'center',
-          boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
+          boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
+          position: 'relative'
         }}>
+          {isVotingPowerLoading && (
+            <div style={{
+              position: 'absolute',
+              top: '10px',
+              right: '10px',
+              width: '12px',
+              height: '12px',
+              borderRadius: '50%',
+              border: '2px solid #f3f3f3',
+              borderTop: '2px solid #3498db',
+              animation: 'spin 1s linear infinite'
+            }}></div>
+          )}
           <h3 style={{ marginTop: 0, marginBottom: '10px' }}>Voting Power</h3>
-          <div id="voting-power" style={{ 
+          <div style={{ 
             fontSize: '24px', 
             fontWeight: 'bold',
             wordBreak: 'break-all',
             overflow: 'hidden',
             textOverflow: 'ellipsis'
           }}>
-            {votingPower}
+            {isVotingPowerLoading && votingPower === 'Loading...' ? 'Loading...' : formatBalanceDisplay(votingPower)}
           </div>
         </div>
       </div>
+      
+      {/* Add animation for spinner */}
+      <style>
+        {`
+          @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+          }
+        `}
+      </style>
       
       {/* Use the existing TokenActions component */}
       {address && (
@@ -246,7 +401,7 @@ const TokenManagementPage: React.FC = () => {
         </div>
       )}
       
-      {/* Add the new UnbondingRequests component */}
+      {/* Add the UnbondingRequests component */}
       {address && (
         <div style={{ marginBottom: '30px' }}>
           <UnbondingRequests onSuccess={refreshBalances} />
@@ -279,26 +434,6 @@ const TokenManagementPage: React.FC = () => {
           During this time, they cannot be used for voting. After the unbonding period ends, you need to complete the 
           unwrapping process to receive your NSI tokens.
         </p>
-      </div>
-      
-      {/* Debug info */}
-      <div style={{ 
-        marginTop: '20px', 
-        padding: '15px', 
-        backgroundColor: '#f8f9fa', 
-        borderRadius: '8px',
-        border: '1px solid #dee2e6',
-        fontSize: '14px'
-      }}>
-        <h3 style={{ marginTop: 0 }}>Debug Information</h3>
-        <p><strong>Connected Address:</strong> {address || 'Not connected'}</p>
-        <p><strong>NSI Token Contract:</strong> {nsiToken ? 'Available' : 'Not available'}</p>
-        <p><strong>Card Catalog Contract:</strong> {cardCatalog ? 'Available' : 'Not available'}</p>
-        <p><strong>NSI Balance (State):</strong> {nsiBalance}</p>
-        <p><strong>wNSI Balance (State):</strong> {wNsiBalance}</p>
-        <p><strong>Voting Power (State):</strong> {votingPower}</p>
-        <p><strong>Is Loading:</strong> {isLoading ? 'Yes' : 'No'}</p>
-        <p><strong>Render Key:</strong> {key}</p>
       </div>
     </div>
   );
