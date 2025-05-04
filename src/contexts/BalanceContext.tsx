@@ -3,6 +3,7 @@ import { useAccount } from 'wagmi';
 import { contractService } from '../services/contract.service';
 import { eventEmitter, EventType } from '../services/event-listener.service';
 import { CONTRACT_ADDRESSES } from '../config/constants';
+import { formatBigInt } from '../utils/contracts';
 
 // Define the balance context state interface
 interface BalanceContextState {
@@ -95,9 +96,9 @@ export const BalanceProvider: React.FC<BalanceProviderProps> = ({ children }) =>
       ]);
       
       // Format the balances
-      const formattedNsiBalance = contractService.formatBigInt(nsiBalanceValue);
-      const formattedWNsiBalance = contractService.formatBigInt(wNsiBalanceValue);
-      const formattedVotingPower = contractService.formatBigInt(votingPowerValue);
+      const formattedNsiBalance = formatBigInt(nsiBalanceValue);
+      const formattedWNsiBalance = formatBigInt(wNsiBalanceValue);
+      const formattedVotingPower = formatBigInt(votingPowerValue);
       
       // Update state
       setNsiBalance(formattedNsiBalance);

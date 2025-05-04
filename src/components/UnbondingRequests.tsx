@@ -5,8 +5,9 @@ import { config } from '../wagmi';
 import { formatBigInt } from '../utils/contracts';
 import { CONTRACT_ADDRESSES } from '../config/constants';
 import CardCatalogABI from '../config/abis/CardCatalog.json';
-import { transactionService } from '../services/transaction.service';
+import { transactionService, TransactionStatus } from '../services/transaction.service';
 import { eventEmitter, EventType, useEventListener } from '../services/event-listener.service';
+
 
 interface UnbondingRequest {
   id: string;
@@ -33,69 +34,73 @@ const UnbondingRequests: React.FC<UnbondingRequestsProps> = ({ onSuccess }) => {
   const [transactionStatus, setTransactionStatus] = useState<string>('');
   
   // Fetch unbonding requests
-  const fetchUnbondingRequests = async () => {
-    if (!address || !publicClient) {
+const fetchUnbondingRequests = async () => {
+  if (!address || !publicClient) {
+    setUnbondingRequests([]);
+    setIsLoading(false);
+    return;
+  }
+  
+  setIsLoading(true);
+  setError(null);
+  
+  try {
+    // Get the CardCatalog contract
+    const cardCatalogContract = {
+      address: CONTRACT_ADDRESSES.CARD_CATALOG as `0x${string}`,
+      abi: CardCatalogABI
+    };
+    
+    // Get the number of unbonding requests
+    const unbondingRequestCount = await publicClient.readContract({
+      ...cardCatalogContract,
+      functionName: 'getUnbondingRequestCount',
+      args: [address]
+    });
+    
+    if (Number(unbondingRequestCount) === 0) {
       setUnbondingRequests([]);
       setIsLoading(false);
       return;
     }
     
-    setIsLoading(true);
-    setError(null);
+    // Fetch all unbonding requests
+    const requests: UnbondingRequest[] = [];
     
-    try {
-      // Get the CardCatalog contract
-      const cardCatalogContract = {
-        address: CONTRACT_ADDRESSES.CARD_CATALOG as `0x${string}`,
-        abi: CardCatalogABI
+    // Define a type for the unbonding request response
+    type UnbondingRequestResponse = [bigint, bigint, bigint]; // [amount, requestTime, completionTime]
+    
+    for (let i = 0; i < Number(unbondingRequestCount); i++) {
+      const request = await publicClient.readContract({
+        ...cardCatalogContract,
+        functionName: 'getUnbondingRequestByIndex',
+        args: [address, i]
+      }) as UnbondingRequestResponse;
+      
+      // Format the request data
+      const formattedRequest: UnbondingRequest = {
+        id: i.toString(),
+        amount: formatBigInt(request[0]),
+        requestTime: Number(request[1]),
+        completionTime: Number(request[2]),
+        isReady: Number(request[2]) <= Math.floor(Date.now() / 1000)
       };
       
-      // Get the number of unbonding requests
-      const unbondingRequestCount = await publicClient.readContract({
-        ...cardCatalogContract,
-        functionName: 'getUnbondingRequestCount',
-        args: [address]
-      });
-      
-      if (Number(unbondingRequestCount) === 0) {
-        setUnbondingRequests([]);
-        setIsLoading(false);
-        return;
-      }
-      
-      // Fetch all unbonding requests
-      const requests: UnbondingRequest[] = [];
-      
-      for (let i = 0; i < Number(unbondingRequestCount); i++) {
-        const request = await publicClient.readContract({
-          ...cardCatalogContract,
-          functionName: 'getUnbondingRequestByIndex',
-          args: [address, i]
-        });
-        
-        // Format the request data
-        const formattedRequest: UnbondingRequest = {
-          id: i.toString(),
-          amount: formatBigInt(request[0]),
-          requestTime: Number(request[1]),
-          completionTime: Number(request[2]),
-          isReady: Number(request[2]) <= Math.floor(Date.now() / 1000)
-        };
-        
-        requests.push(formattedRequest);
-      }
-      
-      // Sort by completion time (earliest first)
-      requests.sort((a, b) => a.completionTime - b.completionTime);
-      
-      setUnbondingRequests(requests);
-    } catch (err: any) {
-      console.error('Error fetching unbonding requests:', err);
-      setError(err.message || 'Failed to fetch unbonding requests');
-    } finally {
-      setIsLoading(false);
+      requests.push(formattedRequest);
     }
-  };
+    
+    // Sort by completion time (earliest first)
+    requests.sort((a, b) => a.completionTime - b.completionTime);
+    
+    setUnbondingRequests(requests);
+  } catch (err: any) {
+    console.error('Error fetching unbonding requests:', err);
+    setError(err.message || 'Failed to fetch unbonding requests');
+  } finally {
+    setIsLoading(false);
+  }
+};
+
   
   // Complete an unbonding request
   const completeUnbonding = async (requestId: string) => {
@@ -142,8 +147,8 @@ const UnbondingRequests: React.FC<UnbondingRequestsProps> = ({ onSuccess }) => {
         // Update transaction status in our service
         transactionService.updateTransaction(
           txHash,
-          'confirmed',
-          null
+          TransactionStatus.CONFIRMED,
+          undefined
         );
         
         console.log('Unbonding completion confirmed:', receipt);
@@ -184,7 +189,7 @@ const UnbondingRequests: React.FC<UnbondingRequestsProps> = ({ onSuccess }) => {
   
   // Listen for unwrap events
   useEventListener(
-    [EventType.UNWRAP_REQUESTED, EventType.UNWRAPPED],
+    [EventType.UNWRAPPED],
     () => {
       console.log('Unwrap event detected, refreshing unbonding requests');
       fetchUnbondingRequests();

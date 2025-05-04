@@ -6,7 +6,7 @@ import { CONTRACT_ADDRESSES } from '../config/constants';
 import CardCatalogABI from '../config/abis/CardCatalog.json';
 import { getPublicClient } from 'wagmi/actions';
 import { config } from '../wagmi';
-import { transactionService } from '../services/transaction.service';
+import { transactionService, TransactionStatus } from '../services/transaction.service';
 import { eventEmitter, EventType } from '../services/event-listener.service';
 
 interface TokenActionsProps {
@@ -86,8 +86,7 @@ const TokenActions: React.FC<TokenActionsProps> = ({ address, onSuccess }) => {
         // Update transaction status in our service
         transactionService.updateTransaction(
           approveTxHash,
-          'confirmed',
-          null
+          TransactionStatus.CONFIRMED
         );
         
         console.log('Approval confirmed:', approveReceipt);
@@ -132,8 +131,7 @@ const TokenActions: React.FC<TokenActionsProps> = ({ address, onSuccess }) => {
         // Update transaction status in our service
         transactionService.updateTransaction(
           wrapTxHash,
-          'confirmed',
-          null
+          TransactionStatus.CONFIRMED
         );
         
         console.log('Wrap confirmed:', wrapReceipt);
@@ -214,16 +212,16 @@ const TokenActions: React.FC<TokenActionsProps> = ({ address, onSuccess }) => {
         // Update transaction status in our service
         transactionService.updateTransaction(
           unwrapTxHash,
-          'confirmed',
-          null
+          TransactionStatus.CONFIRMED
         );
         
         console.log('Unwrap request confirmed:', unwrapReceipt);
         setTransactionStatus('Unwrap request confirmed! Tokens will be available after the 7-day unbonding period.');
         
         // Emit event for balance updates
-        eventEmitter.emit(EventType.UNWRAP_REQUESTED, {
-          eventName: EventType.UNWRAP_REQUESTED,
+        // If UNWRAP_REQUESTED doesn't exist in EventType, use UNWRAPPED or another appropriate event
+        eventEmitter.emit(EventType.UNWRAPPED, {
+          eventName: EventType.UNWRAPPED,
           args: [address, amount],
           timestamp: Date.now()
         });
