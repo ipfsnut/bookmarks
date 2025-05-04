@@ -2,6 +2,8 @@ import { sdk } from "@farcaster/frame-sdk";
 import { useEffect } from "react";
 import { Routes, Route, Navigate, Link } from "react-router-dom";
 import { useAccount } from "wagmi";
+import { WagmiConfig } from 'wagmi';
+import { config } from './wagmi';
 import { WalletConnect } from "./components/WalletConnect";
 import { ProtectedRoute } from "./components/ProtectedRoute";
 import { UserProfile } from "./components/UserProfile";
@@ -11,6 +13,11 @@ import { useWallet } from "./contexts/WalletContext";
 import BookmarkDetailPage from "./pages/BookmarkDetail";
 import TokenManagementPage from "./pages/TokenManagement";
 import LeaderboardPage from "./pages/LeaderboardPage";
+import { BalanceProvider } from './contexts/BalanceContext';
+import { eventListenerService } from './services/event-listener.service';
+
+// Initialize event listeners
+eventListenerService.initialize();
 
 // Simple Home component
 function Home() {
@@ -29,15 +36,13 @@ function Home() {
 // Dashboard component with navigation
 function Dashboard() {
   const { address } = useAccount();
-  
   return (
     <div>
       <h1>Dashboard</h1>
       <p>Connected wallet: {address}</p>
-      
-      <nav style={{ 
-        display: 'flex', 
-        gap: '20px', 
+      <nav style={{
+        display: 'flex',
+        gap: '20px',
         marginBottom: '30px',
         padding: '10px 0',
         borderBottom: '1px solid #dee2e6'
@@ -50,7 +55,6 @@ function Dashboard() {
         <Link to="/leaderboard">Leaderboard</Link>
         <Link to="/profile">My Profile</Link>
       </nav>
-      
       <div style={{ marginTop: "20px" }}>
         <Link to="/">Back to Home</Link>
       </div>
@@ -83,7 +87,7 @@ function AddBookmarkPage() {
   return (
     <div>
       <Dashboard />
-      <BookmarkForm 
+      <BookmarkForm
         onSuccess={(bookmark) => {
           alert(`Bookmark "${bookmark.title}" created successfully!`);
           // Optionally redirect to My Bookmarks page
@@ -104,68 +108,37 @@ function ProfilePage() {
   );
 }
 
-function App() {
+function AppRoutes() {
   useEffect(() => {
     // Let Farcaster Frame know the app is ready
     sdk.actions.ready();
   }, []);
 
   return (
-      <Routes>
-        <Route path="/" element={<Home />} />
-        
-        <Route path="/dashboard" element={
-          <ProtectedRoute>
-            <Dashboard />
-          </ProtectedRoute>
-        } />
-        
-        <Route path="/bookmarks" element={
-          <ProtectedRoute>
-            <BookmarksPage />
-          </ProtectedRoute>
-        } />
-        
-        <Route path="/my-bookmarks" element={
-          <ProtectedRoute>
-            <MyBookmarksPage />
-          </ProtectedRoute>
-        } />
-        
-        <Route path="/add-bookmark" element={
-          <ProtectedRoute>
-            <AddBookmarkPage />
-          </ProtectedRoute>
-        } />
-        
-        <Route path="/profile" element={
-          <ProtectedRoute>
-            <ProfilePage />
-          </ProtectedRoute>
-        } />
-        
-        {/* Add the new route for bookmark details */}
-        <Route path="/bookmark/:id" element={
-          <ProtectedRoute>
-            <BookmarkDetailPage />
-          </ProtectedRoute>
-        } />
-        
-        {/* Add the new route for token management */}
-        <Route path="/tokens" element={
-          <ProtectedRoute>
-            <TokenManagementPage />
-          </ProtectedRoute>
-        } />
-        
-        <Route path="/leaderboard" element={
-          <ProtectedRoute>
-            <LeaderboardPage />
-          </ProtectedRoute>
-        } />
-        
-        <Route path="*" element={<Navigate to="/" />} />
-      </Routes>
+    <Routes>
+      <Route path="/" element={<Home />} />
+      <Route path="/dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
+      <Route path="/bookmarks" element={<ProtectedRoute><BookmarksPage /></ProtectedRoute>} />
+      <Route path="/my-bookmarks" element={<ProtectedRoute><MyBookmarksPage /></ProtectedRoute>} />
+      <Route path="/add-bookmark" element={<ProtectedRoute><AddBookmarkPage /></ProtectedRoute>} />
+      <Route path="/profile" element={<ProtectedRoute><ProfilePage /></ProtectedRoute>} />
+      {/* Add the new route for bookmark details */}
+      <Route path="/bookmark/:id" element={<ProtectedRoute><BookmarkDetailPage /></ProtectedRoute>} />
+      {/* Add the new route for token management */}
+      <Route path="/tokens" element={<ProtectedRoute><TokenManagementPage /></ProtectedRoute>} />
+      <Route path="/leaderboard" element={<ProtectedRoute><LeaderboardPage /></ProtectedRoute>} />
+      <Route path="*" element={<Navigate to="/" />} />
+    </Routes>
+  );
+}
+
+function App() {
+  return (
+    <WagmiConfig config={config}>
+      <BalanceProvider>
+        <AppRoutes />
+      </BalanceProvider>
+    </WagmiConfig>
   );
 }
 

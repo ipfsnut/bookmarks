@@ -1,6 +1,6 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { useAccount } from 'wagmi';
-import { useBalances } from '../services/contract.service';
+import { useBalanceContext } from '../contexts/BalanceContext';
 import TokenActions from '../components/TokenActions';
 import UnbondingRequests from '../components/UnbondingRequests';
 
@@ -34,36 +34,18 @@ const TokenManagementPage: React.FC = () => {
     votingPower, 
     isLoading, 
     error, 
-    fetchBalances,
-    lastUpdated 
-  } = useBalances(address);
-  
-  // Individual loading states for more granular UI feedback
-  const [isNsiLoading, setIsNsiLoading] = useState<boolean>(isLoading);
-  const [isWNsiLoading, setIsWNsiLoading] = useState<boolean>(isLoading);
-  const [isVotingPowerLoading, setIsVotingPowerLoading] = useState<boolean>(isLoading);
+    lastUpdated, 
+    fetchBalances, 
+    clearBalanceCache 
+  } = useBalanceContext();
   
   // Force re-render key
   const [refreshKey, setRefreshKey] = useState<number>(0);
   
-  // Update individual loading states when main loading state changes
-  useEffect(() => {
-    setIsNsiLoading(isLoading);
-    setIsWNsiLoading(isLoading);
-    setIsVotingPowerLoading(isLoading);
-  }, [isLoading]);
-  
   // Function to refresh balances
   const refreshBalances = () => {
-    // Reset loading states
-    setIsNsiLoading(true);
-    setIsWNsiLoading(true);
-    setIsVotingPowerLoading(true);
-    
-    // Fetch balances
+    clearBalanceCache();
     fetchBalances();
-    
-    // Force a re-render
     setRefreshKey(prev => prev + 1);
   };
   
@@ -161,7 +143,7 @@ const TokenManagementPage: React.FC = () => {
           boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
           position: 'relative'
         }}>
-          {isNsiLoading && (
+          {isLoading && (
             <div style={{
               position: 'absolute',
               top: '10px',
@@ -182,7 +164,7 @@ const TokenManagementPage: React.FC = () => {
             overflow: 'hidden',
             textOverflow: 'ellipsis'
           }}>
-            {isNsiLoading ? 'Loading...' : formatBalanceDisplay(nsiBalance)}
+            {isLoading && nsiBalance === '0' ? 'Loading...' : formatBalanceDisplay(nsiBalance)}
           </div>
         </div>
         
@@ -194,7 +176,7 @@ const TokenManagementPage: React.FC = () => {
           boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
           position: 'relative'
         }}>
-          {isWNsiLoading && (
+          {isLoading && (
             <div style={{
               position: 'absolute',
               top: '10px',
@@ -215,7 +197,7 @@ const TokenManagementPage: React.FC = () => {
             overflow: 'hidden',
             textOverflow: 'ellipsis'
           }}>
-            {isWNsiLoading ? 'Loading...' : formatBalanceDisplay(wNsiBalance)}
+            {isLoading && wNsiBalance === '0' ? 'Loading...' : formatBalanceDisplay(wNsiBalance)}
           </div>
         </div>
         
@@ -227,7 +209,7 @@ const TokenManagementPage: React.FC = () => {
           boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
           position: 'relative'
         }}>
-          {isVotingPowerLoading && (
+          {isLoading && (
             <div style={{
               position: 'absolute',
               top: '10px',
@@ -248,7 +230,7 @@ const TokenManagementPage: React.FC = () => {
             overflow: 'hidden',
             textOverflow: 'ellipsis'
           }}>
-            {isVotingPowerLoading ? 'Loading...' : formatBalanceDisplay(votingPower)}
+            {isLoading && votingPower === '0' ? 'Loading...' : formatBalanceDisplay(votingPower)}
           </div>
         </div>
       </div>

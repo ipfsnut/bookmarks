@@ -6,6 +6,8 @@ import { CONTRACT_ADDRESSES } from '../config/constants';
 import CardCatalogABI from '../config/abis/CardCatalog.json';
 import { getPublicClient } from 'wagmi/actions';
 import { config } from '../wagmi';
+import { transactionService } from '../services/transaction.service';
+import { eventEmitter, EventType } from '../services/event-listener.service';
 
 interface TokenActionsProps {
   address: string;
@@ -62,6 +64,13 @@ const TokenActions: React.FC<TokenActionsProps> = ({ address, onSuccess }) => {
         args: [CONTRACT_ADDRESSES.CARD_CATALOG, amount]
       });
       
+      // Add the transaction to our transaction service
+      transactionService.addTransaction(
+        approveTxHash,
+        'Approving NSI tokens for wrapping',
+        { amount: wrapAmount }
+      );
+      
       console.log('Approval transaction submitted:', approveTxHash);
       setTransactionStatus('Approval transaction submitted. Waiting for confirmation...');
       
@@ -73,6 +82,13 @@ const TokenActions: React.FC<TokenActionsProps> = ({ address, onSuccess }) => {
             setTimeout(() => reject(new Error('Transaction confirmation timeout')), 60000)
           )
         ]);
+        
+        // Update transaction status in our service
+        transactionService.updateTransaction(
+          approveTxHash,
+          'confirmed',
+          null
+        );
         
         console.log('Approval confirmed:', approveReceipt);
         setTransactionStatus('Approval confirmed. Wrapping tokens...');
@@ -94,6 +110,13 @@ const TokenActions: React.FC<TokenActionsProps> = ({ address, onSuccess }) => {
         args: [amount]
       });
       
+      // Add the transaction to our transaction service
+      transactionService.addTransaction(
+        wrapTxHash,
+        'Wrapping NSI tokens',
+        { amount: wrapAmount }
+      );
+      
       console.log('Wrap transaction submitted:', wrapTxHash);
       setTransactionStatus('Wrap transaction submitted. Waiting for confirmation...');
       
@@ -106,8 +129,22 @@ const TokenActions: React.FC<TokenActionsProps> = ({ address, onSuccess }) => {
           )
         ]);
         
+        // Update transaction status in our service
+        transactionService.updateTransaction(
+          wrapTxHash,
+          'confirmed',
+          null
+        );
+        
         console.log('Wrap confirmed:', wrapReceipt);
         setTransactionStatus('Tokens wrapped successfully!');
+        
+        // Emit event for balance updates
+        eventEmitter.emit(EventType.WRAPPED, {
+          eventName: EventType.WRAPPED,
+          args: [address, amount],
+          timestamp: Date.now()
+        });
       } catch (confirmError) {
         console.warn('Error confirming wrap, but transaction might have succeeded:', confirmError);
         setTransactionStatus('Wrap transaction submitted but confirmation timed out. Please check your balance.');
@@ -155,6 +192,13 @@ const TokenActions: React.FC<TokenActionsProps> = ({ address, onSuccess }) => {
         args: [amount]
       });
       
+      // Add the transaction to our transaction service
+      transactionService.addTransaction(
+        unwrapTxHash,
+        'Requesting unwrap of wNSI tokens',
+        { amount: unwrapAmount }
+      );
+      
       console.log('Unwrap request submitted:', unwrapTxHash);
       setTransactionStatus('Unwrap request submitted. Waiting for confirmation...');
       
@@ -167,8 +211,22 @@ const TokenActions: React.FC<TokenActionsProps> = ({ address, onSuccess }) => {
           )
         ]);
         
+        // Update transaction status in our service
+        transactionService.updateTransaction(
+          unwrapTxHash,
+          'confirmed',
+          null
+        );
+        
         console.log('Unwrap request confirmed:', unwrapReceipt);
         setTransactionStatus('Unwrap request confirmed! Tokens will be available after the 7-day unbonding period.');
+        
+        // Emit event for balance updates
+        eventEmitter.emit(EventType.UNWRAP_REQUESTED, {
+          eventName: EventType.UNWRAP_REQUESTED,
+          args: [address, amount],
+          timestamp: Date.now()
+        });
       } catch (confirmError) {
         console.warn('Error confirming unwrap, but transaction might have succeeded:', confirmError);
         setTransactionStatus('Unwrap request submitted but confirmation timed out. Please check your pending unwraps.');
