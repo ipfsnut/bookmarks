@@ -1,7 +1,6 @@
 // This file now uses our unified contract service
 import { useAccount } from 'wagmi';
 import { useState, useEffect, useRef } from 'react';
-import { ethers } from 'ethers';
 import { 
   contractService, 
   formatBigInt, 

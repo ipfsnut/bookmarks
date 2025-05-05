@@ -7,9 +7,9 @@ import {
   useContractService,
   contractEvents
 } from '../services/contract.service';
-
-// Import the ABIs and constants needed for the hooks
 import { CONTRACT_ADDRESSES } from '../config/constants';
+
+// Import the ABIs
 import CardCatalogABI from '../config/abis/CardCatalog.json';
 import BookmarkNFTABI from '../config/abis/BookmarkNFT.json';
 import BookmarkVotingABI from '../config/abis/BookmarkVoting.json';
@@ -50,55 +50,45 @@ export async function safeContractCall<T>(
   return contractService.callContract(contract, method, args, fallbackValue);
 }
 
-// Hook to use the NSI Token contract
+// Hook to use the NSI Token contract (ERC20)
 export function useNSIToken() {
-  const { contractService } = useContractService();
-  return contractService.getContract(
-    CONTRACT_ADDRESSES.NSI_TOKEN, 
-    [
-      "function balanceOf(address owner) view returns (uint256)",
-      "function decimals() view returns (uint8)",
-      "function symbol() view returns (string)",
-      "function transfer(address to, uint amount) returns (bool)",
-      "function allowance(address owner, address spender) view returns (uint256)",
-      "function approve(address spender, uint256 amount) returns (bool)"
-    ]
-  );
+  return contractService.getContract(CONTRACT_ADDRESSES.NSI_TOKEN, [
+    "function balanceOf(address owner) view returns (uint256)",
+    "function decimals() view returns (uint8)",
+    "function symbol() view returns (string)",
+    "function transfer(address to, uint amount) returns (bool)",
+    "function allowance(address owner, address spender) view returns (uint256)",
+    "function approve(address spender, uint256 amount) returns (bool)"
+  ]);
 }
 
 // Hook to use the CardCatalog contract
 export function useCardCatalog() {
-  const { contractService } = useContractService();
   return contractService.getContract(CONTRACT_ADDRESSES.CARD_CATALOG, CardCatalogABI);
 }
 
 // Hook to use the BookmarkNFT contract
 export function useBookmarkNFT() {
-  const { contractService } = useContractService();
   return contractService.getContract(CONTRACT_ADDRESSES.BOOKMARK_NFT, BookmarkNFTABI);
 }
 
 // Hook to use the BookmarkVoting contract
 export function useBookmarkVoting() {
-  const { contractService } = useContractService();
   return contractService.getContract(CONTRACT_ADDRESSES.BOOKMARK_VOTING, BookmarkVotingABI);
 }
 
 // Hook to use the BookmarkLeaderboard contract
 export function useBookmarkLeaderboard() {
-  const { contractService } = useContractService();
   return contractService.getContract(CONTRACT_ADDRESSES.BOOKMARK_LEADERBOARD, BookmarkLeaderboardABI);
 }
 
 // Hook to use the BookmarkRewards contract
 export function useBookmarkRewards() {
-  const { contractService } = useContractService();
   return contractService.getContract(CONTRACT_ADDRESSES.BOOKMARK_REWARDS, BookmarkRewardsABI);
 }
 
 // Hook to use the BookmarkAuction contract
 export function useBookmarkAuction() {
-  const { contractService } = useContractService();
   return contractService.getContract(CONTRACT_ADDRESSES.BOOKMARK_AUCTION, BookmarkAuctionABI);
 }
 

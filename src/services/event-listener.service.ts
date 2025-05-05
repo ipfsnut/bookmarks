@@ -54,7 +54,10 @@ export enum EventType {
   BOOKMARK_UPDATED = 'BookmarkUpdated',
   TRANSACTION_PENDING = 'TransactionPending',
   TRANSACTION_CONFIRMED = 'TransactionConfirmed',
-  TRANSACTION_FAILED = 'TransactionFailed'
+  TRANSACTION_FAILED = 'TransactionFailed',
+  
+  // Add missing event type for unwrap requests
+  UNWRAP_REQUESTED = 'UnwrapRequested'
 }
 
 // Define the event data interface
@@ -74,7 +77,8 @@ const contractEventConfig = {
     events: [
       EventType.WRAPPED,
       EventType.UNWRAPPED,
-      EventType.STAKE_UPDATED
+      EventType.STAKE_UPDATED,
+      EventType.UNWRAP_REQUESTED
     ]
   },
   [CONTRACT_ADDRESSES.BOOKMARK_NFT]: {
@@ -235,6 +239,11 @@ class EventListenerService {
         contractService.clearCache('getBookmarkVotes');
         contractService.clearCache('getUserVotesForBookmark');
         contractService.clearCache('getRemainingVotingPower');
+        break;
+      case EventType.UNWRAP_REQUESTED:
+        // Clear cache for unbonding requests
+        contractService.clearCache('getUnbondingRequestCount');
+        contractService.clearCache('getUnbondingRequestByIndex');
         break;
       default:
         // No specific cache to clear for other events
