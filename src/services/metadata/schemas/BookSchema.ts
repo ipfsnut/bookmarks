@@ -38,14 +38,14 @@ export class BookSchema extends BaseSchema {
       required: true,
       placeholder: 'Author name(s)',
       helpText: 'For multiple authors, separate with commas',
-      validation: (value) => !value ? 'Author is required' : null
+      validation: (value: any) => !value ? 'Author is required' : null
     },
     {
       name: 'isbn',
       label: 'ISBN',
       type: 'text',
       placeholder: 'ISBN',
-      validation: (value) => {
+      validation: (value: string) => {
         if (!value) return null;
         // Simple ISBN validation
         const isbnRegex = /^(?:ISBN(?:-1[03])?:? )?(?=[0-9X]{10}$|(?=(?:[0-9]+[- ]){3})[- 0-9X]{13}$|97[89][0-9]{10}$|(?=(?:[0-9]+[- ]){4})[- 0-9]{17}$)(?:97[89][- ]?)?[0-9]{1,5}[- ]?[0-9]+[- ]?[0-9]+[- ]?[0-9X]$/i;
@@ -123,18 +123,18 @@ export class BookSchema extends BaseSchema {
     // Process author field - convert comma-separated string to array if needed
     let author = data.author;
     if (typeof author === 'string' && author.includes(',')) {
-      author = author.split(',').map(a => a.trim()).filter(Boolean);
+      author = author.split(',').map((a: string) => a.trim()).filter(Boolean);
     }
     
     // Process tags and other array fields
     const tags = Array.isArray(data.tags) ? data.tags : 
-      (typeof data.tags === 'string' ? data.tags.split(',').map(t => t.trim()).filter(Boolean) : []);
+      (typeof data.tags === 'string' ? data.tags.split(',').map((t: string) => t.trim()).filter(Boolean) : []);
     
     const bisac_codes = Array.isArray(data.bisac_codes) ? data.bisac_codes : 
-      (typeof data.bisac_codes === 'string' ? data.bisac_codes.split(',').map(c => c.trim()).filter(Boolean) : []);
+      (typeof data.bisac_codes === 'string' ? data.bisac_codes.split(',').map((c: string) => c.trim()).filter(Boolean) : []);
     
     const translators = Array.isArray(data.translators) ? data.translators : 
-      (typeof data.translators === 'string' ? data.translators.split(',').map(t => t.trim()).filter(Boolean) : []);
+      (typeof data.translators === 'string' ? data.translators.split(',').map((t: string) => t.trim()).filter(Boolean) : []);
     
     return {
       type: ContentType.BOOK,

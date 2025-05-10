@@ -55,8 +55,19 @@ class MetadataService {
     
     try {
       const schema = this.getSchema(contentType);
-      const metadata = await schema.extractMetadata(source);
-      return { contentType, metadata };
+      
+      // Check if extractMetadata method exists on the schema
+      if (schema.extractMetadata) {
+        const metadata = await schema.extractMetadata(source);
+        return { contentType, metadata };
+      } else {
+        // Handle case where schema doesn't implement extractMetadata
+        console.warn(`Schema for ${contentType} does not implement extractMetadata`);
+        return { 
+          contentType, 
+          metadata: { type: contentType } 
+        };
+      }
     } catch (error) {
       console.error(`Error extracting metadata for ${contentType}:`, error);
       return { 

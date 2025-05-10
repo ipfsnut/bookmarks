@@ -1,7 +1,7 @@
 // src/components/metadata/DynamicForm.tsx
-import React, { useState, useEffect } from 'react';
-import { ContentType, FormField } from '../../services/metadata/types';
-import { metadataService } from '../../services/metadata/MetadataService';
+import React, { useState, useEffect, FormEvent } from 'react';
+import { ContentType, FormField } from './types';
+import { metadataService } from './MetadataService';
 
 // Import form field components
 import TextField from './fields/TextField';
@@ -40,7 +40,7 @@ const DynamicForm: React.FC<DynamicFormProps> = ({
   }, [contentType, initialData]);
   
   const handleChange = (name: string, value: any) => {
-    setFormData(prev => ({ ...prev, [name]: value }));
+    setFormData((prev: any) => ({ ...prev, [name]: value }));
     
     // Clear error for this field if it exists
     if (errors[name]) {
@@ -52,7 +52,7 @@ const DynamicForm: React.FC<DynamicFormProps> = ({
     }
   };
   
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
     setIsSubmitting(true);
     
@@ -123,6 +123,7 @@ const DynamicForm: React.FC<DynamicFormProps> = ({
     }
   };
   
+  // Make sure to return the JSX element here
   return (
     <form onSubmit={handleSubmit} className="space-y-6">
       {/* Form title */}
